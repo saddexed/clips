@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gallery Viewer</title>
+    <link rel="stylesheet" href="css/index.css">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <nav class="nav">
+                <div class="logo">Gallery Viewer</div>
+                <div class="nav-links">
+                    <a href="/" class="nav-link">Gallery</a>
+                    <a href="/control-panel" class="nav-link">Control Panel</a>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="container">
+            <div id="loading" class="loading">
+                <div class="loading-spinner"></div>
+                <p>Loading gallery...</p>
+            </div>
+
+            <div id="empty-gallery" class="empty-gallery" style="display: none;">
+                <h2>No Media Yet</h2>
+                <p>Start building your gallery by uploading your first image or video</p>
+                <a href="/control-panel" class="btn">Upload Media</a>
+            </div>
+
+            <div id="gallery-grid" class="gallery-grid" style="display: none;"></div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Saddex. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- Image/Video Modal -->
+    <div id="mediaModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick=closeModal()>&times;</span>
+            <div id="modal-media-container"></div>
+            <div class="modal-info">
+                <h3 class="modal-title" id="modal-title"></h3>
+                <div class="modal-meta" id="modal-meta"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/gallery.js"></script>
+</body>
+</html>

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Panel - Gallery Viewer</title>
+    <link rel="stylesheet" href="css/control.css">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <nav class="nav">
+                <div class="logo">Gallery Viewer</div>
+                <div class="nav-links">
+                    <a href="/" class="nav-link">Gallery</a>
+                    <a href="/control-panel" class="nav-link">Control Panel</a>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="container">
+            <div class="control-header">
+                <h1>Control Panel</h1>
+                <p>Upload and manage your gallery media files</p>
+            </div>
+
+            <!-- Gallery Stats -->
+            <div class="gallery-stats">
+                <div class="stat">
+                    <span class="stat-number" id="total-images">0</span>
+                    <span class="stat-label">Total Files</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-number" id="total-size">0 MB</span>
+                    <span class="stat-label">Total Size</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-number" id="video-count">0</span>
+                    <span class="stat-label">Videos</span>
+                </div>
+            </div>
+
+            <!-- Tab Navigation -->
+            <div class="tab-navigation">
+                <button class="tab-btn active" data-tab="upload">Upload Media</button>
+                <button class="tab-btn" data-tab="manage">Manage Gallery</button>
+            </div>
+
+            <!-- Upload Tab -->
+            <div id="upload-tab" class="tab-content active">
+                <div class="upload-section">
+                    <form id="uploadForm" class="upload-form">
+                        <div class="form-group">
+                            <label class="form-label" for="title">Media Title (Optional)</label>
+                            <input 
+                                type="text" 
+                                id="title" 
+                                name="title" 
+                                class="form-input"
+                                placeholder="Enter a title for your media (or leave blank to use filename)"
+                            >
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="file">Select Media File</label>
+                            <div class="file-upload-area" id="fileUploadArea">
+                                <div class="upload-icon">📁</div>
+                                <div class="upload-text">Click to select media or drag and drop</div>
+                                <div class="upload-subtext">Supports: Images (JPG, PNG, GIF, WebP, BMP, TIFF) & Videos (MP4, AVI, MOV, WMV, FLV, WebM, MKV, M4V)<br>Max size: 100MB</div>
+                                <input 
+                                    type="file" 
+                                    id="file" 
+                                    name="file" 
+                                    accept="image/*,video/*"
+                                    style="display: none;"
+                                    required
+                                >
+                            </div>
+                            <div class="file-info" id="fileInfo">
+                                <strong>Selected file:</strong> <span id="fileName"></span><br>
+                                <strong>Type:</strong> <span id="fileType"></span><br>
+                                <strong>Size:</strong> <span id="fileSize"></span>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn" id="uploadBtn">
+                            Upload to Gallery
+                        </button>
+
+                        <div class="progress-bar" id="progressBar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+
+                        <div class="status-message" id="statusMessage"></div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Manage Tab -->
+            <div id="manage-tab" class="tab-content">
+                <div class="gallery-management">
+                    <div class="management-header">
+                        <h2>Gallery Management</h2>
+                        <p>Edit and delete your uploaded media files</p>
+                        <div class="search-bar">
+                            <input type="text" id="searchInput" placeholder="Search by title or filename..." class="search-input">
+                        </div>
+                    </div>
+                    
+                    <div class="gallery-list" id="galleryList">
+                        <!-- Gallery items will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content edit-modal-content">
+            <span class="close" id="editModalClose">&times;</span>
+            <h3>Edit Media</h3>
+            <form id="editForm">
+                <div class="form-group">
+                    <label class="form-label" for="editTitle">Title</label>
+                    <input type="text" id="editTitle" class="form-input" required>
+                </div>
+                <div class="edit-modal-actions">
+                    <button type="button" class="btn-cancel" id="cancelEdit">Cancel</button>
+                    <button type="submit" class="btn-save">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content delete-modal-content">
+            <h3>Confirm Deletion</h3>
+            <p>Are you sure you want to delete "<span id="deleteItemTitle"></span>"?</p>
+            <p class="warning-text">This action cannot be undone.</p>
+            <div class="delete-modal-actions">
+                <button class="btn-cancel" id="cancelDelete">Cancel</button>
+                <button class="btn-delete" id="confirmDelete">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/control.js"></script>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Saddex. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>
