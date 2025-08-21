@@ -5,10 +5,20 @@ const axios = require('axios');
 const fs = require('fs-extra');
 const path = require('path');
 const cors = require('cors');
+const basicAuth = require('express-basic-auth');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Basic Auth configuration
+const auth = basicAuth({
+    users: { 
+        [process.env.ADMIN_USERNAME || 'admin']: process.env.ADMIN_PASSWORD || 'password123' 
+    },
+    challenge: true,
+    realm: 'Gallery Control Panel'
+});
 
 // Middleware
 app.use(cors());
@@ -177,7 +187,8 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.get('/control-panel', (req, res) => {
+// Protected control panel route
+app.get('/control-panel', auth, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'control-panel.html'));
 });
 
@@ -186,7 +197,8 @@ app.get('/api/gallery', (req, res) => {
     res.json(data);
 });
 
-app.post('/api/upload', upload.single('file'), async (req, res) => {
+// Protected API routes
+app.post('/api/upload', auth, upload.single('file'), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ error: 'No file uploaded' });
@@ -195,7 +207,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         const { title } = req.body;
         const originalPath = req.file.path;
         const fileType = getFileType(req.file.originalname);
-        const processedFilename = `processed_${req.file.filename}`;
+        const processedFilename = `${req.file.filename}`;
         const processedPath = path.join('processed', processedFilename);
 
         // Process the file based on type
@@ -246,7 +258,8 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     }
 });
 
-app.put('/api/gallery/:id', (req, res) => {
+// Protected API routes
+app.put('/api/gallery/:id', auth, (req, res) => {
     try {
         const { id } = req.params;
         const { title } = req.body;
@@ -282,7 +295,8 @@ app.put('/api/gallery/:id', (req, res) => {
     }
 });
 
-app.delete('/api/gallery/:id', (req, res) => {
+// Protected API routes
+app.delete('/api/gallery/:id', auth, (req, res) => {
     try {
         const { id } = req.params;
         const galleryData = loadGalleryData();

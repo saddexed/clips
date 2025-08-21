@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control Panel - Gallery Viewer</title>
+    <title>Control Panel - Clips</title>
     <link rel="stylesheet" href="css/control.css">
 </head>
 <body>
     <header class="header">
         <div class="container">
             <nav class="nav">
-                <div class="logo">Gallery Viewer</div>
+                <div class="logo">Clips Control Panel</div>
                 <div class="nav-links">
                     <a href="/" class="nav-link">Gallery</a>
                     <a href="/control-panel" class="nav-link">Control Panel</a>
@@ -26,26 +26,32 @@
                 <p>Upload and manage your gallery media files</p>
             </div>
 
-            <!-- Gallery Stats -->
-            <div class="gallery-stats">
-                <div class="stat">
-                    <span class="stat-number" id="total-images">0</span>
-                    <span class="stat-label">Total Files</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-number" id="total-size">0 MB</span>
-                    <span class="stat-label">Total Size</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-number" id="video-count">0</span>
-                    <span class="stat-label">Videos</span>
+            <!-- Gallery Stats Card -->
+            <div class="stats-card" id="statsCard">
+                <div class="stats-card-icon">📊</div>
+                <div class="stats-card-content">
+                    <div class="stats-card-header">Gallery Stats</div>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <span class="stat-value" id="total-images">0</span>
+                            <span class="stat-desc">Total Files</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-value" id="total-size">0 MB</span>
+                            <span class="stat-desc">Total Size</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-value" id="video-count">0</span>
+                            <span class="stat-desc">Videos</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <!-- Tab Navigation -->
             <div class="tab-navigation">
                 <button class="tab-btn active" data-tab="upload">Upload Media</button>
-                <button class="tab-btn" data-tab="manage">Manage Gallery</button>
+                <button class="tab-btn" data-tab="manage">Manage Clips</button>
             </div>
 
             <!-- Upload Tab -->
@@ -66,9 +72,7 @@
                         <div class="form-group">
                             <label class="form-label" for="file">Select Media File</label>
                             <div class="file-upload-area" id="fileUploadArea">
-                                <div class="upload-icon">📁</div>
-                                <div class="upload-text">Click to select media or drag and drop</div>
-                                <div class="upload-subtext">Supports: Images (JPG, PNG, GIF, WebP, BMP, TIFF) & Videos (MP4, AVI, MOV, WMV, FLV, WebM, MKV, M4V)<br>Max size: 100MB</div>
+                                <div class="upload-text">upload supported image or video</div>
                                 <input 
                                     type="file" 
                                     id="file" 
@@ -102,7 +106,7 @@
             <div id="manage-tab" class="tab-content">
                 <div class="gallery-management">
                     <div class="management-header">
-                        <h2>Gallery Management</h2>
+                        <h2>Clip Management</h2>
                         <p>Edit and delete your uploaded media files</p>
                         <div class="search-bar">
                             <input type="text" id="searchInput" placeholder="Search by title or filename..." class="search-input">

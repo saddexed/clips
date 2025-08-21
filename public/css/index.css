@@ -486,8 +486,8 @@ body {
 
 .modal-meta {
     display: grid;
-    /* grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); */
-    gap: 12px;
+    /* grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+    gap: 12px; */
     color: var(--discord-light);
 }
 
