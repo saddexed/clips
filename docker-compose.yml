@@ -1,0 +1,91 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: clips-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: clips
+      POSTGRES_PASSWORD: clips_secret
+      POSTGRES_DB: clips_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - clips-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clips -d clips_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: clips-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    networks:
+      - clips-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: clips-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://clips:clips_secret@postgres:5432/clips_db?schema=public
+      REDIS_URL: redis://redis:6379
+      DATA_PATH: /app/data
+      NODE_ENV: production
+    volumes:
+      - ${VIDEO_STORAGE_PATH:-/mnt/video_storage}:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - clips-network
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: clips-worker
+    restart: unless-stopped
+    command: ["npm", "run", "worker:start"]
+    environment:
+      DATABASE_URL: postgresql://clips:clips_secret@postgres:5432/clips_db?schema=public
+      REDIS_URL: redis://redis:6379
+      DATA_PATH: /app/data
+      NODE_ENV: production
+    volumes:
+      - ${VIDEO_STORAGE_PATH:-/mnt/video_storage}:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - clips-network
+
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+
+networks:
+  clips-network:
+    driver: bridge

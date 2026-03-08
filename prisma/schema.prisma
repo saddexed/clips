@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ── Enums ─────────────────────────────────────────────────────────────
+
+enum VideoStatus {
+  UPLOADING
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum JobType {
+  UPLOAD
+  TRANSCODE
+  THUMBNAIL
+  METADATA_EXTRACT
+  EDIT
+  DELETE
+  HIDE
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// ── Models ────────────────────────────────────────────────────────────
+
+model Video {
+  id               String      @id @default(uuid())
+  filename         String
+  originalPath     String
+  processedPath    String?
+  originalMetadata Json?
+  title            String      @default("")
+  description      String      @default("")
+  status           VideoStatus @default(UPLOADING)
+  originalSize     BigInt      @default(0)
+  processedSize    BigInt      @default(0)
+  duration         Float?
+  width            Int?
+  height           Int?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  deletedAt        DateTime?
+  isHidden         Boolean     @default(false)
+
+  comments   Comment[]
+  tags       Tag[]        @relation("VideoTags")
+  jobHistory JobHistory[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("videos")
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  videoId   String
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([videoId])
+  @@map("comments")
+}
+
+model Tag {
+  id     String  @id @default(uuid())
+  name   String  @unique
+  videos Video[] @relation("VideoTags")
+
+  @@map("tags")
+}
+
+model JobHistory {
+  id            String    @id @default(uuid())
+  videoId       String?
+  video         Video?    @relation(fields: [videoId], references: [id], onDelete: SetNull)
+  jobType       JobType
+  status        JobStatus @default(PENDING)
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+  originalSize  BigInt    @default(0)
+  processedSize BigInt    @default(0)
+  errorMessage  String?
+  metadata      Json?
+
+  @@index([videoId])
+  @@index([status])
+  @@map("job_history")
+}
