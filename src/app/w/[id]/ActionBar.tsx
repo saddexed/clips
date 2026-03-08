@@ -29,7 +29,7 @@ export default function ActionBar({ videoId }: { videoId: string }) {
   };
 
   const handleDownload = () => {
-    window.location.href = `/api/videos/download/${videoId}`;
+    window.location.href = `/d/${videoId}`;
   };
 
   return (

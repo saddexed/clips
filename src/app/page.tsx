@@ -50,7 +50,7 @@ export default async function Home() {
             gap: '1.5rem' 
           }}>
             {videos.map(video => (
-              <Link key={video.id} href={`/watch/${video.id}`} style={{ textDecoration: 'none' }}>
+              <Link key={video.id} href={`/w/${video.id}`} style={{ textDecoration: 'none' }}>
                 <div 
                   className="glass-panel video-card-hover" 
                   style={{ 

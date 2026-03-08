@@ -19,7 +19,7 @@ export function VideoThumbnail({ videoId, duration }: { videoId: string, duratio
   const [isMuted, setIsMuted] = useState(true);
   
   const src = `/api/videos/stream/${videoId}`;
-  const thumbSrc = `/api/videos/thumbnail/${videoId}`;
+  const thumbSrc = `/t/${videoId}`;
 
   return (
     <div 

@@ -42,7 +42,7 @@ services:
     container_name: clips-app
     restart: unless-stopped
     ports:
-      - "6119:6119"
+      - "6119:3000"
     environment:
       DATABASE_URL: postgresql://clips:clips_secret@postgres:5432/clips_db?schema=public
       REDIS_URL: redis://redis:6379
