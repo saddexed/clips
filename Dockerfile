@@ -58,9 +58,9 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/src/generated ./src/generated
 
-EXPOSE 3000
+EXPOSE 6119
 
-ENV PORT=3000
+ENV PORT=6119
 ENV HOSTNAME="0.0.0.0"
 
 CMD ["node", "server.js"]
