@@ -9,6 +9,14 @@
 * 🟢 You can import this file directly.
 */
 
+export const MediaType = {
+  VIDEO: 'VIDEO',
+  IMAGE: 'IMAGE'
+} as const
+
+export type MediaType = (typeof MediaType)[keyof typeof MediaType]
+
+
 export const VideoStatus = {
   UPLOADING: 'UPLOADING',
   QUEUED: 'QUEUED',
@@ -27,7 +35,8 @@ export const JobType = {
   METADATA_EXTRACT: 'METADATA_EXTRACT',
   EDIT: 'EDIT',
   DELETE: 'DELETE',
-  HIDE: 'HIDE'
+  HIDE: 'HIDE',
+  CANCELLED: 'CANCELLED'
 } as const
 
 export type JobType = (typeof JobType)[keyof typeof JobType]

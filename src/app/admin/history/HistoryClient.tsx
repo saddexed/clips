@@ -50,35 +50,35 @@ export default function HistoryClient({ items }: { items: FlatHistoryItem[] }) {
 
               return (
                 <tr key={job.id} style={{ transition: 'background-color 0.2s' }}>
-                  <td>
+                  <td style={{ padding: '0.6rem 1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: color, fontWeight: 500 }}>
                       {icon}
                       {label}
                       {job.status === 'FAILED' && <AlertTriangle size={14} color="#ef4444" style={{ marginLeft: 'auto' }} />}
                     </div>
                   </td>
-                  <td>
+                  <td style={{ padding: '0.6rem 1rem' }}>
                     <div style={{ fontWeight: 500, color: 'var(--foreground)' }}>
                       {displayName}
                     </div>
                     {isUpload && job.originalSize > 0 && (
-                      <div style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', marginTop: '0.2rem' }}>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', marginTop: '0.1rem' }}>
                         Size: {formatBytes(job.originalSize)}
                       </div>
                     )}
                     {job.jobType === 'TRANSCODE' && job.processedSize > 0 && (
-                      <div style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', marginTop: '0.2rem' }}>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', marginTop: '0.1rem' }}>
                         Result: {formatBytes(job.processedSize)}
                       </div>
                     )}
                   </td>
-                  <td>
+                  <td style={{ padding: '0.6rem 1rem' }}>
                     <span style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', fontFamily: 'monospace' }}>
-                      {job.videoId ? `${job.videoId.slice(0, 8)}...` : <span style={{color: '#ef4444'}}>DELETED</span>}
+                      {job.videoId ? job.videoId : (job.metadata?.originalUUID ? job.metadata.originalUUID : <span style={{color: '#ef4444'}}>DELETED</span>)}
                     </span>
                   </td>
-                  <td>
-                    <div style={{ color: 'var(--muted-foreground)', fontSize: '0.9rem' }}>
+                  <td style={{ padding: '0.6rem 1rem' }}>
+                    <div style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem' }}>
                       {formatTimestamp(new Date(timeStamp))}
                     </div>
                   </td>
@@ -111,6 +111,8 @@ function getActionDetails(job: FlatHistoryItem) {
     }
     case 'DELETE':
       return { icon: <Trash2 size={16} />, label: 'Delete', color: '#ef4444' };
+    case 'CANCELLED':
+      return { icon: <AlertTriangle size={16} />, label: 'Cancelled', color: '#ef4444' };
     default:
       return { icon: <ShieldQuestion size={16} />, label: job.jobType, color: 'var(--foreground)' };
   }

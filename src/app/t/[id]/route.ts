@@ -32,7 +32,11 @@ export async function GET(
     } catch {
       // Generate a thumbnail frame on the fly if it doesn't already exist
       // Priority: processedPath, then originalPath
-      const sourcePath = video.processedPath || video.originalPath;
+      let sourcePath = video.processedPath || video.originalPath;
+      if (sourcePath && sourcePath.startsWith('/app/data') && process.env.DATA_PATH && process.env.DATA_PATH !== '/app/data') {
+        sourcePath = sourcePath.replace('/app/data', process.env.DATA_PATH);
+      }
+      
       if (!sourcePath) return new NextResponse(null, { status: 404 });
 
       try {

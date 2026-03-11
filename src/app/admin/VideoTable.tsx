@@ -12,6 +12,7 @@ type Video = {
   title: string;
   description: string;
   status: string;
+  mediaType?: string;
   duration: number | null;
   width: number | null;
   height: number | null;
@@ -95,17 +96,21 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
               {videos.map((vid) => (
                 <tr 
                   key={vid.id} 
-                  style={{ transition: 'background-color 0.2s', cursor: 'pointer' }}
+                  style={{ 
+                    transition: 'background-color 0.2s', 
+                    cursor: 'pointer',
+                    backgroundColor: vid.status === 'FAILED' ? 'rgba(239, 68, 68, 0.05)' : 'transparent'
+                  }}
                   onClick={() => setEditingVideo(vid)}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = vid.status === 'FAILED' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(255,255,255,0.05)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = vid.status === 'FAILED' ? 'rgba(239, 68, 68, 0.05)' : 'transparent'}
                 >
                   <td>
                     <div style={{ fontWeight: 500, color: 'var(--foreground)' }}>
                       {vid.title || vid.filename}
                     </div>
                     <div style={{ fontSize: '0.875rem', color: 'var(--muted-foreground)', marginTop: '0.25rem' }}>
-                      ID: {vid.id.slice(0, 8)}...
+                      ID: {vid.id}
                     </div>
                   </td>
                   <td>
@@ -130,8 +135,7 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
                     </div>
                   </td>
                   <td style={{ color: 'var(--muted-foreground)' }}>
-                    {formatBytes(vid.originalSize)}
-                    {vid.processedSize ? ` → ${formatBytes(vid.processedSize)}` : ''}
+                    {getCompressionInfo(vid.originalSize, vid.processedSize).columnStr}
                   </td>
                   <td style={{ color: 'var(--muted-foreground)' }}>
                     {new Date(vid.createdAt).toLocaleString(undefined, { 
@@ -272,7 +276,7 @@ function EditVideoModal({ video, onClose, onSave, onDelete }: { video: Video, on
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%',
-          maxWidth: '900px',
+          maxWidth: '1200px',
           maxHeight: '90vh',
           overflowY: 'auto',
           borderRadius: 'var(--radius)',
@@ -287,7 +291,9 @@ function EditVideoModal({ video, onClose, onSave, onDelete }: { video: Video, on
           <X size={20} />
         </button>
         
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '1.5rem' }}>Edit Video Info</h2>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '1.5rem' }}>
+          Edit {video.mediaType === 'IMAGE' ? 'Image' : 'Video'} Info
+        </h2>
 
         {error && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#f87171', background: 'rgba(239, 68, 68, 0.1)', padding: '1rem', borderRadius: 'var(--radius)', marginBottom: '1.5rem' }}>
@@ -298,26 +304,49 @@ function EditVideoModal({ video, onClose, onSave, onDelete }: { video: Video, on
 
         <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', marginBottom: '2rem' }}>
           {/* Left Column: Player & Metadata */}
-          <div style={{ flex: '1 1 350px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ flex: '2 1 500px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {video.status === 'COMPLETED' ? (
-              <SafeVideoPlayer 
-                src={`/api/videos/stream/${video.id}`} 
-              />
+              video.mediaType === 'IMAGE' ? (
+                <div style={{ width: '100%', background: '#000', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                  <img 
+                    src={`/v/${video.id}`} 
+                    alt={video.originalMetadata?.originalFilename || video.title} 
+                    style={{ width: '100%', maxHeight: '600px', objectFit: 'contain', display: 'block' }}
+                  />
+                </div>
+              ) : (
+                <SafeVideoPlayer 
+                  src={`/v/${video.id}`} 
+                />
+              )
             ) : (
-              <div style={{ width: '100%', aspectRatio: '16/9', background: 'var(--card)', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted-foreground)' }}>
-                Preview Not Available
+              <div style={{ width: '100%', aspectRatio: '16/9', background: 'var(--card)', borderRadius: 'var(--radius)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: video.status === 'FAILED' ? '#ef4444' : 'var(--muted-foreground)', gap: '1rem', border: video.status === 'FAILED' ? '1px solid rgba(239,68,68,0.3)' : '1px solid var(--border)' }}>
+                {video.status === 'FAILED' ? (
+                   <>
+                     <AlertTriangle size={32} />
+                     <span style={{ fontWeight: 500 }}>Processing Failed</span>
+                     <span style={{ fontSize: '0.875rem', opacity: 0.8 }}>This media could not be processed.</span>
+                   </>
+                ) : (
+                   <>
+                     <Activity size={32} className="text-blue-400" />
+                     <span style={{ fontWeight: 500 }}>Currently Processing</span>
+                     <span style={{ fontSize: '0.875rem', opacity: 0.8 }}>Please wait for the background worker.</span>
+                   </>
+                )}
               </div>
             )}
             
             <div style={{ fontSize: '0.875rem', background: 'var(--secondary)', padding: '0.75rem', borderRadius: 'var(--radius)', wordBreak: 'break-all' }}>
               <strong>Original Filename:</strong> {video.originalMetadata?.originalFilename || video.filename}<br/>
+              <strong>Size:</strong> {getCompressionInfo(video.originalSize, video.processedSize).editStr}<br/>
               <strong>Date:</strong> {new Date(video.createdAt).toLocaleString()}<br/>
               <strong>ID:</strong> {video.id}
             </div>
           </div>
 
           {/* Right Column: Editable Fields */}
-          <div style={{ flex: '1 1 350px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>Title</label>
               <input 
@@ -391,4 +420,19 @@ function formatBytes(bytes: number | bigint | null) {
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(val) / Math.log(k));
   return parseFloat((val / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function getCompressionInfo(originalSize: number | bigint, processedSize: number | bigint | null) {
+  const orig = Number(originalSize);
+  const proc = processedSize ? Number(processedSize) : orig;
+  
+  const ratio = orig > 0 ? Math.round((proc / orig) * 100) : 100;
+  
+  const editStr = (!processedSize || proc === orig) 
+      ? `${formatBytes(orig)}(100%)` 
+      : `${formatBytes(orig)}->${formatBytes(proc)}(${ratio}%)`;
+      
+  const columnStr = `${formatBytes(proc)}(${ratio}%)`;
+  
+  return { columnStr, editStr };
 }

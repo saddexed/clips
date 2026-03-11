@@ -19,7 +19,7 @@ export default function ActionBar({ videoId }: { videoId: string }) {
 
   const handleCopyDirect = async () => {
     try {
-      const directUrl = `${window.location.origin}/api/videos/stream/${videoId}`;
+      const directUrl = `${window.location.origin}/v/${videoId}`;
       await navigator.clipboard.writeText(directUrl);
       setCopiedDirect(true);
       setTimeout(() => setCopiedDirect(false), 2000);

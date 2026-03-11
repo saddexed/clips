@@ -120,7 +120,7 @@ export async function DELETE(
         jobType: "DELETE",
         status: "COMPLETED",
         completedAt: new Date(),
-        metadata: { filename: video.title || video.filename, action: "Moved to .trashed", trashedPath }
+        metadata: { filename: video.title || video.filename, originalUUID: video.id, action: "Moved to .trashed", trashedPath }
       }
     });
 

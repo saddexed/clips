@@ -4,9 +4,27 @@ import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { videoQueue } from "@/lib/queue";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { jwtVerify } from "jose";
 
 export async function POST(request: NextRequest) {
   try {
+    // 1. Manually enforce JWT authentication
+    // We do this inside the route handler instead of Edge Middleware to evade the 10MB edge proxy limits.
+    if (process.env.ADMIN_PASSWORD) {
+      const cookieStore = await cookies();
+      const token = cookieStore.get('admin_session')?.value;
+      if (!token) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      try {
+        const secret = new TextEncoder().encode(process.env.AUTH_SECRET || 'fallback_secret_for_dev_only');
+        await jwtVerify(token, secret);
+      } catch (err) {
+        return NextResponse.json({ error: "Invalid session" }, { status: 401 });
+      }
+    }
+
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
 
@@ -17,14 +35,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!file.type.startsWith("video/")) {
+    const isVideo = file.type.startsWith("video/");
+    const isImage = file.type.startsWith("image/");
+
+    if (!isVideo && !isImage) {
       return NextResponse.json(
-        { error: "Only video files are allowed" },
+        { error: "Only video and image files are allowed" },
         { status: 400 }
       );
     }
 
-    const dataPath = process.env.DATA_PATH || "/app/data";
+    const dataPath = path.resolve(process.cwd(), process.env.DATA_PATH || "/app/data");
     const tempDir = path.join(dataPath, ".uploads");
     
     // Ensure the .uploads directory exists
@@ -50,8 +71,9 @@ export async function POST(request: NextRequest) {
         title: formData.get("title")?.toString() || file.name.replace(/\.[^/.]+$/, ""),
         description: formData.get("description")?.toString() || "",
         status: "QUEUED",
+        mediaType: isImage ? "IMAGE" : "VIDEO",
         originalSize: file.size,
-        originalMetadata: { originalFilename: file.name }, // Store original name in metadata
+        originalMetadata: { originalFilename: file.name, contentType: file.type }, // Store original name in metadata
       },
     });
 
@@ -66,17 +88,19 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 3. Add pending TRANSCODE entry (will be updated by the worker on completion)
-    await prisma.jobHistory.create({
-      data: {
-        videoId: video.id,
-        jobType: "TRANSCODE",
-        status: "PENDING",
-        originalSize: file.size,
-      },
-    });
+    // 3. Add pending TRANSCODE entry for VIDEOS only
+    if (isVideo) {
+      await prisma.jobHistory.create({
+        data: {
+          videoId: video.id,
+          jobType: "TRANSCODE",
+          status: "PENDING",
+          originalSize: file.size,
+        },
+      });
+    }
 
-    // 3. Enqueue the work to BullMQ
+    // 4. Enqueue the work to BullMQ
     await videoQueue.add("process-video", {
       videoId: video.id,
       filePath,

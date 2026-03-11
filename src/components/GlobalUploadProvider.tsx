@@ -30,12 +30,22 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isOverlayOpen, setOverlayOpen] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
   const router = useRouter();
 
   // 1. Process files and add to state
   const addFiles = useCallback((files: FileList | File[]) => {
-    const newItems: UploadItem[] = Array.from(files)
-      .filter(f => f.type.startsWith('video/'))
+    const fileArray = Array.from(files);
+    
+    // Check for invalid files
+    const invalidFiles = fileArray.filter(f => !f.type.startsWith('video/') && !f.type.startsWith('image/'));
+    if (invalidFiles.length > 0) {
+      setFileError('Invalid file type, only images and videos are supported.');
+      setTimeout(() => setFileError(null), 3000);
+    }
+
+    const newItems: UploadItem[] = fileArray
+      .filter(f => f.type.startsWith('video/') || f.type.startsWith('image/'))
       .map(f => ({
         id: Math.random().toString(36).substring(7),
         file: f,
@@ -45,6 +55,9 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
 
     if (newItems.length > 0) {
       setUploads(prev => [...prev, ...newItems]);
+      setOverlayOpen(true);
+    } else if (invalidFiles.length > 0) {
+      // Open overlay to show the error even if no valid files were dropped
       setOverlayOpen(true);
     }
   }, []);
@@ -148,6 +161,14 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
   return (
     <GlobalUploadContext.Provider value={{ uploads, addFiles, removeUpload, clearCompleted, isOverlayOpen, setOverlayOpen }}>
       {children}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes shake {
+          10%, 90% { transform: translate3d(-1px, 0, 0); }
+          20%, 80% { transform: translate3d(2px, 0, 0); }
+          30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+          40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+      `}} />
 
       {/* The Global Drag Overlay -> Styled to resemble the Upload Manager */}
       {isDragging && (
@@ -175,14 +196,14 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
             <div style={{ background: 'var(--secondary)', padding: '1.5rem', borderRadius: '50%', marginBottom: '1.5rem' }}>
               <UploadCloud size={48} className="text-white" />
             </div>
-            <h3 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Drop videos to upload</h3>
+            <h3 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Drop files to upload</h3>
             <p style={{ color: 'var(--muted-foreground)', marginTop: '0.25rem' }}>Files will be instantly queued for conversion.</p>
           </div>
         </div>
       )}
 
       {/* Hidden File Input for OS Selection */}
-      <input type="file" id="global-os-file-picker" multiple accept="video/*" style={{ display: 'none' }} onChange={(e) => {
+      <input type="file" id="global-os-file-picker" multiple accept="video/*,image/*" style={{ display: 'none' }} onChange={(e) => {
         if (e.target.files) addFiles(e.target.files);
         // Reset the input value so the same file can be selected again if needed
         e.target.value = '';
@@ -247,6 +268,26 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
                 <X size={20} />
               </button>
             </div>
+
+            {fileError && (
+              <div 
+                style={{ 
+                  backgroundColor: 'rgba(248, 113, 113, 0.1)', 
+                  color: '#f87171', 
+                  padding: '0.75rem 1.5rem', 
+                  borderBottom: '1px solid rgba(248, 113, 113, 0.2)',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  animation: 'shake 0.4s cubic-bezier(.36,.07,.19,.97) both',
+                }}
+              >
+                <AlertCircle size={16} />
+                {fileError}
+              </div>
+            )}
             
             <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
               {uploads.length === 0 ? (
@@ -288,7 +329,7 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
               <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border)', background: 'rgba(9, 9, 11, 0.4)', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                 <label className="btn-primary" style={{ margin: 0 }}>
                   Select Files
-                  <input type="file" multiple accept="video/*" style={{ display: 'none' }} onChange={(e) => {
+                  <input type="file" multiple accept="video/*,image/*" style={{ display: 'none' }} onChange={(e) => {
                     if (e.target.files) addFiles(e.target.files);
                     e.target.value = '';
                   }} />

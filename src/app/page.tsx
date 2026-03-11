@@ -3,8 +3,13 @@ import { prisma } from '../lib/prisma';
 import { Video } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { VideoThumbnail } from '@/components/VideoThumbnail';
+import { HomeClient } from './HomeClient';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata = {
+  title: 'Clips',
+};
 
 export default async function Home() {
   const videos = await prisma.video.findMany({
@@ -20,22 +25,18 @@ export default async function Home() {
             <div style={{ background: 'var(--foreground)', color: 'var(--background)', padding: '0.2rem 0.6rem', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Video size={20} fill="currentColor" />
             </div>
-            Clips
+            sd3xV
           </Link>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <Link href="/admin" className="btn-secondary" style={{ textDecoration: 'none', fontSize: '0.875rem' }}>Admin Dashboard</Link>
             <ThemeToggle />
           </div>
         </div>
       </header>
       
       <main className="page-container" style={{ flex: 1 }}>
-        <div style={{ padding: '4rem 0 3rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <h2 className="text-gradient" style={{ fontSize: '3.5rem', fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.1, marginBottom: '1rem' }}>
-            Discover Epic Moments
-          </h2>
+        <div style={{ padding: '1rem 0 3rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <p style={{ color: 'var(--muted-foreground)', fontSize: '1.125rem', maxWidth: '600px', lineHeight: 1.6 }}>
-            Browse the most recent gameplay highlights, clutch plays, and unforgettable moments captured by the community.
+            Random assortment of clips I have recorded over the years.
           </p>
         </div>
 
@@ -46,8 +47,9 @@ export default async function Home() {
         ) : (
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', 
-            gap: '1.5rem' 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
+            gap: '1.5rem',
+            width: '100%'
           }}>
             {videos.map(video => (
               <Link key={video.id} href={`/w/${video.id}`} style={{ textDecoration: 'none' }}>
@@ -64,6 +66,7 @@ export default async function Home() {
                   <VideoThumbnail 
                     videoId={video.id} 
                     duration={video.duration} 
+                    mediaType={video.mediaType as any}
                   />
                   <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
                     <h3 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--foreground)', marginBottom: '0.25rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -79,6 +82,9 @@ export default async function Home() {
           </div>
         )}
       </main>
+      
+      {/* Hidden Admin Keyboard Listener */}
+      <HomeClient />
     </div>
   );
 }

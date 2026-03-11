@@ -20,6 +20,7 @@ export async function GET() {
       status: await j.getState(),
       failedReason: j.failedReason,
       timestamp: j.timestamp,
+      videoId: j.data?.videoId,
     })));
 
     return NextResponse.json({

@@ -19,7 +19,10 @@ export async function GET(
       return new NextResponse("Video not found or unavailable", { status: 404 });
     }
 
-    const filePath = video.processedPath;
+    let filePath = video.processedPath;
+    if (filePath && filePath.startsWith('/app/data') && process.env.DATA_PATH && process.env.DATA_PATH !== '/app/data') {
+      filePath = filePath.replace('/app/data', process.env.DATA_PATH);
+    }
     
     try {
       await stat(filePath);

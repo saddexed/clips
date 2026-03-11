@@ -1,32 +1,35 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useCallback } from "react";
 import { Play, Volume2, VolumeX } from "lucide-react";
 
-export function VideoThumbnail({ videoId, duration }: { videoId: string, duration: number | null }) {
+export function VideoThumbnail({ videoId, duration, mediaType = 'VIDEO' }: { videoId: string, duration: number | null, mediaType?: 'VIDEO' | 'IMAGE' }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   
-  const handleRef = (el: HTMLVideoElement | null) => {
+  const [isHovered, setIsHovered] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  
+  const src = `/v/${videoId}`;
+  const thumbSrc = `/t/${videoId}`;
+
+  const handleRef = useCallback((el: HTMLVideoElement | null) => {
     if (videoRef.current && el === null) {
       // Element is unmounting (e.g., navigating away or mouse leaving)
       videoRef.current.pause();
       videoRef.current.removeAttribute('src');
       videoRef.current.load();
+    } else if (el && el.getAttribute('src') !== src) {
+      el.setAttribute('src', src);
     }
     videoRef.current = el;
-  };
-  const [isHovered, setIsHovered] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
-  
-  const src = `/api/videos/stream/${videoId}`;
-  const thumbSrc = `/t/${videoId}`;
+  }, [src]);
 
   return (
     <div 
       style={{ aspectRatio: '16/9', position: 'relative', background: 'var(--secondary)', overflow: 'hidden' }}
       onMouseEnter={() => {
         setIsHovered(true);
-        if (videoRef.current) {
+        if (mediaType === 'VIDEO' && videoRef.current) {
           videoRef.current.play().catch(() => {});
         }
       }}
@@ -34,7 +37,16 @@ export function VideoThumbnail({ videoId, duration }: { videoId: string, duratio
         setIsHovered(false);
       }}
     >
-      {isHovered ? (
+      {mediaType === 'IMAGE' ? (
+        <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+          <img 
+            src={src}
+            alt="Image Thumbnail"
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            loading="lazy"
+          />
+        </div>
+      ) : isHovered ? (
         <div style={{ position: 'relative', width: '100%', height: '100%' }}>
           <video 
             ref={handleRef}
@@ -104,7 +116,7 @@ export function VideoThumbnail({ videoId, duration }: { videoId: string, duratio
           </div>
         </div>
       )}
-      {duration ? (
+      {mediaType === 'VIDEO' && duration ? (
         <span style={{ position: 'absolute', bottom: '0.5rem', right: '0.5rem', background: 'rgba(0,0,0,0.8)', color: '#fff', fontSize: '0.75rem', padding: '0.125rem 0.375rem', borderRadius: '0.25rem', fontWeight: 500, pointerEvents: 'none', transition: 'opacity 0.2s', opacity: isHovered ? 0 : 1 }}>
           {formatDuration(duration)}
         </span>

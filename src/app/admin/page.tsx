@@ -19,7 +19,7 @@ export default async function AdminManagePage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
           <h1 style={{ fontSize: '1.875rem', fontWeight: 600, letterSpacing: '-0.025em', marginBottom: '0.25rem' }}>
-            Video Library
+            Media Library
           </h1>
           <p style={{ color: 'var(--muted-foreground)' }}>Manage your uploaded clips and their processing statuses.</p>
         </div>

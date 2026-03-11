@@ -42,12 +42,15 @@ services:
     container_name: clips-app
     restart: unless-stopped
     ports:
-      - "6119:3000"
+      - "6119:6119"
     environment:
       DATABASE_URL: postgresql://clips:clips_secret@postgres:5432/clips_db?schema=public
       REDIS_URL: redis://redis:6379
       DATA_PATH: /app/data
       NODE_ENV: production
+      PORT: 6119
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      AUTH_SECRET: ${AUTH_SECRET:-fallback_secret_for_docker_prod}
     volumes:
       - ${VIDEO_STORAGE_PATH:-/mnt/video_storage}:/app/data
     depends_on:

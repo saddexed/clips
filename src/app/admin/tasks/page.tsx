@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Activity, Clock, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Activity, Clock, AlertTriangle, CheckCircle, Trash2, Loader2 } from 'lucide-react';
 
 type QueueData = {
   counts: {
@@ -18,6 +18,7 @@ type QueueData = {
     status: string;
     failedReason?: string;
     timestamp: number;
+    videoId?: string;
   }>;
 };
 
@@ -44,6 +45,31 @@ export default function TasksPage() {
     const intervalId = setInterval(fetchData, 3000);
     return () => clearInterval(intervalId);
   }, []);
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDeleteJob = async (jobId: string) => {
+    if (!confirm('Are you sure you want to cancel and delete this job? If the video was not completed it will be erased.')) return;
+    setDeletingId(jobId);
+    try {
+      const res = await fetch(`/api/queue/${jobId}`, { method: 'DELETE' });
+      if (res.ok) {
+        // Optimistically remove from UI
+        setData(prev => prev ? {
+          ...prev,
+          recentJobs: prev.recentJobs.filter(j => j.id !== jobId)
+        } : null);
+      } else {
+        const err = await res.json();
+        alert(`Failed to delete job: ${err.error}`);
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Network error deleting job');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div>
@@ -72,15 +98,18 @@ export default function TasksPage() {
             <thead>
               <tr>
                 <th>Job ID</th>
+                <th>Video ID</th>
                 <th>Type</th>
                 <th>Status / Progress</th>
                 <th>Created At</th>
+                <th style={{ textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {data.recentJobs.map((job) => (
                 <tr key={job.id}>
                   <td style={{ fontFamily: 'monospace', color: 'var(--muted-foreground)' }}>#{job.id}</td>
+                  <td style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>{job.videoId || '-'}</td>
                   <td style={{ fontWeight: 500 }}>{job.name}</td>
                   <td>
                     {job.status === 'active' ? (
@@ -100,6 +129,30 @@ export default function TasksPage() {
                   </td>
                   <td style={{ color: 'var(--muted-foreground)', fontSize: '0.875rem' }}>
                     {new Date(job.timestamp).toLocaleString()}
+                  </td>
+                  <td style={{ textAlign: 'center' }}>
+                    <button 
+                      onClick={() => handleDeleteJob(job.id)}
+                      disabled={deletingId === job.id}
+                      style={{ 
+                        padding: '0.4rem', 
+                        background: 'rgba(239, 68, 68, 0.1)', 
+                        border: 'none', 
+                        borderRadius: '0.375rem', 
+                        color: '#ef4444', 
+                        cursor: deletingId === job.id ? 'not-allowed' : 'pointer', 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        transition: 'background-color 0.2s',
+                        opacity: deletingId === job.id ? 0.5 : 1
+                      }}
+                      onMouseEnter={(e) => !deletingId && (e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.2)')}
+                      onMouseLeave={(e) => !deletingId && (e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)')}
+                      title="Cancel / Delete Job"
+                    >
+                      {deletingId === job.id ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                    </button>
                   </td>
                 </tr>
               ))}

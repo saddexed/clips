@@ -115,14 +115,14 @@ export async function transcodeToWebM(
 
 
 /**
- * Extracts a single physical thumbnail frame at the 1-second mark.
+ * Extracts a single physical thumbnail frame at the very first frame (0-second mark).
  */
 export async function extractThumbnail(inputPath: string, outputPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const args = [
       "-y",
       "-i", inputPath,
-      "-ss", "00:00:01.000",
+      "-ss", "00:00:00.000",
       "-vframes", "1",
       outputPath
     ];

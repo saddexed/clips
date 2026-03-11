@@ -4,18 +4,17 @@ import { rename, stat, mkdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "../lib/prisma.js";
 import { extractMetadata, transcodeToWebM, extractThumbnail } from "../lib/ffmpeg.js";
+import sharp from "sharp";
 
 const connection = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
   maxRetriesPerRequest: null,
 });
 
-const DATA_PATH = process.env.DATA_PATH || "/app/data";
+const DATA_PATH = path.resolve(process.cwd(), process.env.DATA_PATH || "/app/data");
 
 async function processVideo(job: Job) {
-  const { videoId, filePath } = job.data;
-  console.log(`[Worker] Started processing video ${videoId} at ${filePath}`);
-  
-  const filename = path.basename(filePath);
+  const { videoId } = job.data;
+  console.log(`[Worker] Started processing video ${videoId}`);
 
   await prisma.video.update({
     where: { id: videoId },
@@ -27,101 +26,188 @@ async function processVideo(job: Job) {
     orderBy: { startedAt: "desc" },
   });
 
+  const videoRecord = await prisma.video.findUnique({
+    where: { id: videoId },
+  });
+
+  if (!videoRecord) {
+    throw new Error(`Video record not found for id ${videoId}`);
+  }
+
+  const filename = videoRecord.filename;
+  const filePath = path.join(DATA_PATH, ".uploads", filename);
+  
+  const isImage = videoRecord.mediaType === "IMAGE";
+
   try {
-    // 1. Extract Metadata
-    console.log(`[Worker] Extracting metadata for ${videoId}`);
-    const metadata = await extractMetadata(filePath);
-    
-    // Fetch the existing video to preserve its originalMetadata (like originalFilename)
-    const existingVideo = await prisma.video.findUnique({
-      where: { id: videoId },
-      select: { originalMetadata: true }
-    });
-    
-    const existingMeta = (existingVideo?.originalMetadata as Record<string, any>) || {};
+    if (isImage) {
+      // --- IMAGE PROCESSING PIPELINE ---
+      console.log(`[Worker] Extracting metadata for image ${videoId}`);
+      const metadata = await sharp(filePath).metadata();
+      
+      const existingMeta = (videoRecord.originalMetadata as Record<string, any>) || {};
 
-    await prisma.video.update({
-      where: { id: videoId },
-      data: {
-        duration: metadata.duration,
-        width: metadata.width,
-        height: metadata.height,
-        originalMetadata: {
-          ...existingMeta,
-          ...(metadata.raw as object)
+      await prisma.video.update({
+        where: { id: videoId },
+        data: {
+          width: metadata.width,
+          height: metadata.height,
+          originalMetadata: {
+            ...existingMeta,
+            format: metadata.format,
+            size: metadata.size,
+          },
         },
-      },
-    });
+      });
 
-    if (!metadata.duration) {
-      throw new Error("Could not determine video duration");
-    }
+      const originalStats = await stat(filePath);
+      const baseName = path.parse(filename).name;
 
-    // 2. Extract Thumbnail
-    console.log(`[Worker] Extracting thumbnail for ${videoId}`);
-    const thumbnailDir = path.join(DATA_PATH, ".thumbnails");
-    await mkdir(thumbnailDir, { recursive: true });
-    
-    const baseName = path.parse(filename).name;
-    const thumbnailPath = path.join(thumbnailDir, `${videoId}.png`);
-    await extractThumbnail(filePath, thumbnailPath);
-    
-    await prisma.jobHistory.create({
-      data: {
-        videoId,
-        jobType: "THUMBNAIL",
-        status: "COMPLETED",
-        completedAt: new Date()
+      console.log(`[Worker] Attempting WebP conversion for ${videoId}`);
+      const processedDir = path.join(DATA_PATH, "processed");
+      await mkdir(processedDir, { recursive: true });
+      
+      const outputFilename = `${baseName}.webp`;
+      const outputPath = path.join(processedDir, outputFilename);
+
+      await sharp(filePath)
+        .webp({ lossless: true })
+        .toFile(outputPath);
+      
+      const webpStats = await stat(outputPath);
+      
+      const vaultDir = path.join(DATA_PATH, "vault");
+      await mkdir(vaultDir, { recursive: true });
+
+      let finalPath;
+      let finalSize = 0;
+
+      // Ensure the generated webp is smaller. If tracking original lossless, keep original otherwise
+      if (webpStats.size > originalStats.size) {
+        console.log(`[Worker] Image ${videoId} WebP was larger (${webpStats.size} > ${originalStats.size}), keeping original`);
+        await unlink(outputPath); // throw away the webp
+        finalPath = path.join(vaultDir, `${videoId}${path.extname(filename)}`);
+        await rename(filePath, finalPath);
+        finalSize = originalStats.size;
+      } else {
+        console.log(`[Worker] Image ${videoId} compressed (${originalStats.size} -> ${webpStats.size})`);
+        finalPath = path.join(vaultDir, outputFilename);
+        await rename(outputPath, finalPath);
+        await unlink(filePath).catch(() => {});
+        finalSize = webpStats.size;
       }
-    });
+      
+      await job.updateProgress(100);
 
-    // 3. Transcode to WebM
-    console.log(`[Worker] Transcoding to WebM for ${videoId}`);
-    const processedDir = path.join(DATA_PATH, "processed");
-    await mkdir(processedDir, { recursive: true });
-    
-    const outputFilename = `${baseName}.webm`;
-    const outputPath = path.join(processedDir, outputFilename);
-
-    await transcodeToWebM(filePath, outputPath, metadata.duration, async (percent) => {
-      await job.updateProgress(percent);
-    });
-
-    // 4. Move to Vault
-    console.log(`[Worker] Moving files to vault for ${videoId}`);
-    const vaultDir = path.join(DATA_PATH, "vault");
-    await mkdir(vaultDir, { recursive: true });
-    
-    const finalWebmPath = path.join(vaultDir, outputFilename);
-    
-    // Delete the original raw file from .uploads, keep only WebM
-    await unlink(filePath);
-    await rename(outputPath, finalWebmPath);
-
-    // 5. Final DB Updates
-    const processedStats = await stat(finalWebmPath);
-
-    await prisma.video.update({
-      where: { id: videoId },
-      data: {
-        status: "COMPLETED",
-        processedPath: finalWebmPath,
-        processedSize: processedStats.size,
-      },
-    });
-
-    if (jobHistory) {
-      await prisma.jobHistory.update({
-        where: { id: jobHistory.id },
+      // Final DB Updates
+      await prisma.video.update({
+        where: { id: videoId },
         data: {
           status: "COMPLETED",
-          completedAt: new Date(),
+          processedPath: finalPath,
+          processedSize: finalSize,
+        },
+      });
+
+      console.log(`[Worker] Finished processing image ${videoId}`);
+
+    } else {
+      // --- VIDEO PROCESSING PIPELINE ---
+      console.log(`[Worker] Extracting metadata for video ${videoId}`);
+      const metadata = await extractMetadata(filePath);
+      
+      const existingMeta = (videoRecord.originalMetadata as Record<string, any>) || {};
+
+      await prisma.video.update({
+        where: { id: videoId },
+        data: {
+          duration: metadata.duration,
+          width: metadata.width,
+          height: metadata.height,
+          originalMetadata: {
+            ...existingMeta,
+            ...(metadata.raw as object)
+          },
+        },
+      });
+
+      if (!metadata.duration) {
+        throw new Error("Could not determine video duration");
+      }
+
+      // 2. Extract Thumbnail
+      console.log(`[Worker] Extracting thumbnail for ${videoId}`);
+      const thumbnailDir = path.join(DATA_PATH, ".thumbnails");
+      await mkdir(thumbnailDir, { recursive: true });
+      
+      const baseName = path.parse(filename).name;
+      const thumbnailPath = path.join(thumbnailDir, `${videoId}.png`);
+      await extractThumbnail(filePath, thumbnailPath);
+      
+      await prisma.jobHistory.create({
+        data: {
+          videoId,
+          jobType: "THUMBNAIL",
+          status: "COMPLETED",
+          completedAt: new Date()
+        }
+      });
+
+      // 3. Update Transcode StartedAt so it sits correctly on top of Thumbnail chronologically
+      if (jobHistory) {
+        await prisma.jobHistory.update({
+          where: { id: jobHistory.id },
+          data: { startedAt: new Date() }
+        });
+      }
+
+      console.log(`[Worker] Transcoding to WebM for ${videoId}`);
+      const processedDir = path.join(DATA_PATH, "processed");
+      await mkdir(processedDir, { recursive: true });
+      
+      const outputFilename = `${baseName}.webm`;
+      const outputPath = path.join(processedDir, outputFilename);
+
+      await transcodeToWebM(filePath, outputPath, metadata.duration, async (percent) => {
+        await job.updateProgress(percent);
+      });
+
+      // 4. Move to Vault
+      console.log(`[Worker] Moving files to vault for ${videoId}`);
+      const vaultDir = path.join(DATA_PATH, "vault");
+      await mkdir(vaultDir, { recursive: true });
+      
+      const finalWebmPath = path.join(vaultDir, outputFilename);
+      
+      // Delete the original raw file from .uploads, keep only WebM
+      await unlink(filePath);
+      await rename(outputPath, finalWebmPath);
+
+      // 5. Final DB Updates
+      const processedStats = await stat(finalWebmPath);
+
+      await prisma.video.update({
+        where: { id: videoId },
+        data: {
+          status: "COMPLETED",
+          processedPath: finalWebmPath,
           processedSize: processedStats.size,
         },
       });
-    }
 
-    console.log(`[Worker] Finished processing video ${videoId}`);
+      if (jobHistory) {
+        await prisma.jobHistory.update({
+          where: { id: jobHistory.id },
+          data: {
+            status: "COMPLETED",
+            completedAt: new Date(),
+            processedSize: processedStats.size,
+          },
+        });
+      }
+
+      console.log(`[Worker] Finished processing video ${videoId}`);
+    }
 
   } catch (error) {
     console.error(`[Worker] Error processing video ${videoId}:`, error);
@@ -139,6 +225,18 @@ async function processVideo(job: Job) {
           completedAt: new Date(),
           errorMessage: error instanceof Error ? error.message : "Unknown error",
         },
+      });
+    } else {
+      // For images, we don't create a pending TRANSCODE history row proactively.
+      // If it fails, we need to explicitly inject one so the user sees it in the UI.
+      await prisma.jobHistory.create({
+        data: {
+          videoId,
+          jobType: "TRANSCODE",
+          status: "FAILED",
+          completedAt: new Date(),
+          errorMessage: error instanceof Error ? error.message : "Unknown image processing error",
+        }
       });
     }
 

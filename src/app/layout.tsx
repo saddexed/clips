@@ -1,5 +1,11 @@
 import './globals.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Clips',
+  description: 'A random assortment of video clips',
+};
 
 export default function RootLayout({
   children,

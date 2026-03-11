@@ -9,6 +9,11 @@ datasource db {
 
 // ── Enums ─────────────────────────────────────────────────────────────
 
+enum MediaType {
+  VIDEO
+  IMAGE
+}
+
 enum VideoStatus {
   UPLOADING
   QUEUED
@@ -25,6 +30,7 @@ enum JobType {
   EDIT
   DELETE
   HIDE
+  CANCELLED
 }
 
 enum JobStatus {
@@ -44,6 +50,7 @@ model Video {
   originalMetadata Json?
   title            String      @default("")
   description      String      @default("")
+  mediaType        MediaType   @default(VIDEO)
   status           VideoStatus @default(UPLOADING)
   originalSize     BigInt      @default(0)
   processedSize    BigInt      @default(0)

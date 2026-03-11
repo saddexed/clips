@@ -81,6 +81,7 @@ export const VideoScalarFieldEnum = {
   originalMetadata: 'originalMetadata',
   title: 'title',
   description: 'description',
+  mediaType: 'mediaType',
   status: 'status',
   originalSize: 'originalSize',
   processedSize: 'processedSize',

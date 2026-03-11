@@ -49,6 +49,7 @@ export type VideoMinAggregateOutputType = {
   processedPath: string | null
   title: string | null
   description: string | null
+  mediaType: $Enums.MediaType | null
   status: $Enums.VideoStatus | null
   originalSize: bigint | null
   processedSize: bigint | null
@@ -68,6 +69,7 @@ export type VideoMaxAggregateOutputType = {
   processedPath: string | null
   title: string | null
   description: string | null
+  mediaType: $Enums.MediaType | null
   status: $Enums.VideoStatus | null
   originalSize: bigint | null
   processedSize: bigint | null
@@ -88,6 +90,7 @@ export type VideoCountAggregateOutputType = {
   originalMetadata: number
   title: number
   description: number
+  mediaType: number
   status: number
   originalSize: number
   processedSize: number
@@ -125,6 +128,7 @@ export type VideoMinAggregateInputType = {
   processedPath?: true
   title?: true
   description?: true
+  mediaType?: true
   status?: true
   originalSize?: true
   processedSize?: true
@@ -144,6 +148,7 @@ export type VideoMaxAggregateInputType = {
   processedPath?: true
   title?: true
   description?: true
+  mediaType?: true
   status?: true
   originalSize?: true
   processedSize?: true
@@ -164,6 +169,7 @@ export type VideoCountAggregateInputType = {
   originalMetadata?: true
   title?: true
   description?: true
+  mediaType?: true
   status?: true
   originalSize?: true
   processedSize?: true
@@ -271,6 +277,7 @@ export type VideoGroupByOutputType = {
   originalMetadata: runtime.JsonValue | null
   title: string
   description: string
+  mediaType: $Enums.MediaType
   status: $Enums.VideoStatus
   originalSize: bigint
   processedSize: bigint
@@ -314,6 +321,7 @@ export type VideoWhereInput = {
   originalMetadata?: Prisma.JsonNullableFilter<"Video">
   title?: Prisma.StringFilter<"Video"> | string
   description?: Prisma.StringFilter<"Video"> | string
+  mediaType?: Prisma.EnumMediaTypeFilter<"Video"> | $Enums.MediaType
   status?: Prisma.EnumVideoStatusFilter<"Video"> | $Enums.VideoStatus
   originalSize?: Prisma.BigIntFilter<"Video"> | bigint | number
   processedSize?: Prisma.BigIntFilter<"Video"> | bigint | number
@@ -337,6 +345,7 @@ export type VideoOrderByWithRelationInput = {
   originalMetadata?: Prisma.SortOrderInput | Prisma.SortOrder
   title?: Prisma.SortOrder
   description?: Prisma.SortOrder
+  mediaType?: Prisma.SortOrder
   status?: Prisma.SortOrder
   originalSize?: Prisma.SortOrder
   processedSize?: Prisma.SortOrder
@@ -363,6 +372,7 @@ export type VideoWhereUniqueInput = Prisma.AtLeast<{
   originalMetadata?: Prisma.JsonNullableFilter<"Video">
   title?: Prisma.StringFilter<"Video"> | string
   description?: Prisma.StringFilter<"Video"> | string
+  mediaType?: Prisma.EnumMediaTypeFilter<"Video"> | $Enums.MediaType
   status?: Prisma.EnumVideoStatusFilter<"Video"> | $Enums.VideoStatus
   originalSize?: Prisma.BigIntFilter<"Video"> | bigint | number
   processedSize?: Prisma.BigIntFilter<"Video"> | bigint | number
@@ -386,6 +396,7 @@ export type VideoOrderByWithAggregationInput = {
   originalMetadata?: Prisma.SortOrderInput | Prisma.SortOrder
   title?: Prisma.SortOrder
   description?: Prisma.SortOrder
+  mediaType?: Prisma.SortOrder
   status?: Prisma.SortOrder
   originalSize?: Prisma.SortOrder
   processedSize?: Prisma.SortOrder
@@ -414,6 +425,7 @@ export type VideoScalarWhereWithAggregatesInput = {
   originalMetadata?: Prisma.JsonNullableWithAggregatesFilter<"Video">
   title?: Prisma.StringWithAggregatesFilter<"Video"> | string
   description?: Prisma.StringWithAggregatesFilter<"Video"> | string
+  mediaType?: Prisma.EnumMediaTypeWithAggregatesFilter<"Video"> | $Enums.MediaType
   status?: Prisma.EnumVideoStatusWithAggregatesFilter<"Video"> | $Enums.VideoStatus
   originalSize?: Prisma.BigIntWithAggregatesFilter<"Video"> | bigint | number
   processedSize?: Prisma.BigIntWithAggregatesFilter<"Video"> | bigint | number
@@ -434,6 +446,7 @@ export type VideoCreateInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: string
   description?: string
+  mediaType?: $Enums.MediaType
   status?: $Enums.VideoStatus
   originalSize?: bigint | number
   processedSize?: bigint | number
@@ -457,6 +470,7 @@ export type VideoUncheckedCreateInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: string
   description?: string
+  mediaType?: $Enums.MediaType
   status?: $Enums.VideoStatus
   originalSize?: bigint | number
   processedSize?: bigint | number
@@ -480,6 +494,7 @@ export type VideoUpdateInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.StringFieldUpdateOperationsInput | string
+  mediaType?: Prisma.EnumMediaTypeFieldUpdateOperationsInput | $Enums.MediaType
   status?: Prisma.EnumVideoStatusFieldUpdateOperationsInput | $Enums.VideoStatus
   originalSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   processedSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -503,6 +518,7 @@ export type VideoUncheckedUpdateInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.StringFieldUpdateOperationsInput | string
+  mediaType?: Prisma.EnumMediaTypeFieldUpdateOperationsInput | $Enums.MediaType
   status?: Prisma.EnumVideoStatusFieldUpdateOperationsInput | $Enums.VideoStatus
   originalSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   processedSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -526,6 +542,7 @@ export type VideoCreateManyInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: string
   description?: string
+  mediaType?: $Enums.MediaType
   status?: $Enums.VideoStatus
   originalSize?: bigint | number
   processedSize?: bigint | number
@@ -546,6 +563,7 @@ export type VideoUpdateManyMutationInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.StringFieldUpdateOperationsInput | string
+  mediaType?: Prisma.EnumMediaTypeFieldUpdateOperationsInput | $Enums.MediaType
   status?: Prisma.EnumVideoStatusFieldUpdateOperationsInput | $Enums.VideoStatus
   originalSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   processedSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -566,6 +584,7 @@ export type VideoUncheckedUpdateManyInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.StringFieldUpdateOperationsInput | string
+  mediaType?: Prisma.EnumMediaTypeFieldUpdateOperationsInput | $Enums.MediaType
   status?: Prisma.EnumVideoStatusFieldUpdateOperationsInput | $Enums.VideoStatus
   originalSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   processedSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -586,6 +605,7 @@ export type VideoCountOrderByAggregateInput = {
   originalMetadata?: Prisma.SortOrder
   title?: Prisma.SortOrder
   description?: Prisma.SortOrder
+  mediaType?: Prisma.SortOrder
   status?: Prisma.SortOrder
   originalSize?: Prisma.SortOrder
   processedSize?: Prisma.SortOrder
@@ -613,6 +633,7 @@ export type VideoMaxOrderByAggregateInput = {
   processedPath?: Prisma.SortOrder
   title?: Prisma.SortOrder
   description?: Prisma.SortOrder
+  mediaType?: Prisma.SortOrder
   status?: Prisma.SortOrder
   originalSize?: Prisma.SortOrder
   processedSize?: Prisma.SortOrder
@@ -632,6 +653,7 @@ export type VideoMinOrderByAggregateInput = {
   processedPath?: Prisma.SortOrder
   title?: Prisma.SortOrder
   description?: Prisma.SortOrder
+  mediaType?: Prisma.SortOrder
   status?: Prisma.SortOrder
   originalSize?: Prisma.SortOrder
   processedSize?: Prisma.SortOrder
@@ -678,6 +700,10 @@ export type StringFieldUpdateOperationsInput = {
 
 export type NullableStringFieldUpdateOperationsInput = {
   set?: string | null
+}
+
+export type EnumMediaTypeFieldUpdateOperationsInput = {
+  set?: $Enums.MediaType
 }
 
 export type EnumVideoStatusFieldUpdateOperationsInput = {
@@ -796,6 +822,7 @@ export type VideoCreateWithoutCommentsInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: string
   description?: string
+  mediaType?: $Enums.MediaType
   status?: $Enums.VideoStatus
   originalSize?: bigint | number
   processedSize?: bigint | number
@@ -818,6 +845,7 @@ export type VideoUncheckedCreateWithoutCommentsInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: string
   description?: string
+  mediaType?: $Enums.MediaType
   status?: $Enums.VideoStatus
   originalSize?: bigint | number
   processedSize?: bigint | number
@@ -856,6 +884,7 @@ export type VideoUpdateWithoutCommentsInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.StringFieldUpdateOperationsInput | string
+  mediaType?: Prisma.EnumMediaTypeFieldUpdateOperationsInput | $Enums.MediaType
   status?: Prisma.EnumVideoStatusFieldUpdateOperationsInput | $Enums.VideoStatus
   originalSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   processedSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -878,6 +907,7 @@ export type VideoUncheckedUpdateWithoutCommentsInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.StringFieldUpdateOperationsInput | string
+  mediaType?: Prisma.EnumMediaTypeFieldUpdateOperationsInput | $Enums.MediaType
   status?: Prisma.EnumVideoStatusFieldUpdateOperationsInput | $Enums.VideoStatus
   originalSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   processedSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -900,6 +930,7 @@ export type VideoCreateWithoutTagsInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: string
   description?: string
+  mediaType?: $Enums.MediaType
   status?: $Enums.VideoStatus
   originalSize?: bigint | number
   processedSize?: bigint | number
@@ -922,6 +953,7 @@ export type VideoUncheckedCreateWithoutTagsInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: string
   description?: string
+  mediaType?: $Enums.MediaType
   status?: $Enums.VideoStatus
   originalSize?: bigint | number
   processedSize?: bigint | number
@@ -968,6 +1000,7 @@ export type VideoScalarWhereInput = {
   originalMetadata?: Prisma.JsonNullableFilter<"Video">
   title?: Prisma.StringFilter<"Video"> | string
   description?: Prisma.StringFilter<"Video"> | string
+  mediaType?: Prisma.EnumMediaTypeFilter<"Video"> | $Enums.MediaType
   status?: Prisma.EnumVideoStatusFilter<"Video"> | $Enums.VideoStatus
   originalSize?: Prisma.BigIntFilter<"Video"> | bigint | number
   processedSize?: Prisma.BigIntFilter<"Video"> | bigint | number
@@ -988,6 +1021,7 @@ export type VideoCreateWithoutJobHistoryInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: string
   description?: string
+  mediaType?: $Enums.MediaType
   status?: $Enums.VideoStatus
   originalSize?: bigint | number
   processedSize?: bigint | number
@@ -1010,6 +1044,7 @@ export type VideoUncheckedCreateWithoutJobHistoryInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: string
   description?: string
+  mediaType?: $Enums.MediaType
   status?: $Enums.VideoStatus
   originalSize?: bigint | number
   processedSize?: bigint | number
@@ -1048,6 +1083,7 @@ export type VideoUpdateWithoutJobHistoryInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.StringFieldUpdateOperationsInput | string
+  mediaType?: Prisma.EnumMediaTypeFieldUpdateOperationsInput | $Enums.MediaType
   status?: Prisma.EnumVideoStatusFieldUpdateOperationsInput | $Enums.VideoStatus
   originalSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   processedSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1070,6 +1106,7 @@ export type VideoUncheckedUpdateWithoutJobHistoryInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.StringFieldUpdateOperationsInput | string
+  mediaType?: Prisma.EnumMediaTypeFieldUpdateOperationsInput | $Enums.MediaType
   status?: Prisma.EnumVideoStatusFieldUpdateOperationsInput | $Enums.VideoStatus
   originalSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   processedSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1092,6 +1129,7 @@ export type VideoUpdateWithoutTagsInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.StringFieldUpdateOperationsInput | string
+  mediaType?: Prisma.EnumMediaTypeFieldUpdateOperationsInput | $Enums.MediaType
   status?: Prisma.EnumVideoStatusFieldUpdateOperationsInput | $Enums.VideoStatus
   originalSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   processedSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1114,6 +1152,7 @@ export type VideoUncheckedUpdateWithoutTagsInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.StringFieldUpdateOperationsInput | string
+  mediaType?: Prisma.EnumMediaTypeFieldUpdateOperationsInput | $Enums.MediaType
   status?: Prisma.EnumVideoStatusFieldUpdateOperationsInput | $Enums.VideoStatus
   originalSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   processedSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1136,6 +1175,7 @@ export type VideoUncheckedUpdateManyWithoutTagsInput = {
   originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   title?: Prisma.StringFieldUpdateOperationsInput | string
   description?: Prisma.StringFieldUpdateOperationsInput | string
+  mediaType?: Prisma.EnumMediaTypeFieldUpdateOperationsInput | $Enums.MediaType
   status?: Prisma.EnumVideoStatusFieldUpdateOperationsInput | $Enums.VideoStatus
   originalSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   processedSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1205,6 +1245,7 @@ export type VideoSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   originalMetadata?: boolean
   title?: boolean
   description?: boolean
+  mediaType?: boolean
   status?: boolean
   originalSize?: boolean
   processedSize?: boolean
@@ -1229,6 +1270,7 @@ export type VideoSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   originalMetadata?: boolean
   title?: boolean
   description?: boolean
+  mediaType?: boolean
   status?: boolean
   originalSize?: boolean
   processedSize?: boolean
@@ -1249,6 +1291,7 @@ export type VideoSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   originalMetadata?: boolean
   title?: boolean
   description?: boolean
+  mediaType?: boolean
   status?: boolean
   originalSize?: boolean
   processedSize?: boolean
@@ -1269,6 +1312,7 @@ export type VideoSelectScalar = {
   originalMetadata?: boolean
   title?: boolean
   description?: boolean
+  mediaType?: boolean
   status?: boolean
   originalSize?: boolean
   processedSize?: boolean
@@ -1281,7 +1325,7 @@ export type VideoSelectScalar = {
   isHidden?: boolean
 }
 
-export type VideoOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "filename" | "originalPath" | "processedPath" | "originalMetadata" | "title" | "description" | "status" | "originalSize" | "processedSize" | "duration" | "width" | "height" | "createdAt" | "updatedAt" | "deletedAt" | "isHidden", ExtArgs["result"]["video"]>
+export type VideoOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "filename" | "originalPath" | "processedPath" | "originalMetadata" | "title" | "description" | "mediaType" | "status" | "originalSize" | "processedSize" | "duration" | "width" | "height" | "createdAt" | "updatedAt" | "deletedAt" | "isHidden", ExtArgs["result"]["video"]>
 export type VideoInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   comments?: boolean | Prisma.Video$commentsArgs<ExtArgs>
   tags?: boolean | Prisma.Video$tagsArgs<ExtArgs>
@@ -1306,6 +1350,7 @@ export type $VideoPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs 
     originalMetadata: runtime.JsonValue | null
     title: string
     description: string
+    mediaType: $Enums.MediaType
     status: $Enums.VideoStatus
     originalSize: bigint
     processedSize: bigint
@@ -1749,6 +1794,7 @@ export interface VideoFieldRefs {
   readonly originalMetadata: Prisma.FieldRef<"Video", 'Json'>
   readonly title: Prisma.FieldRef<"Video", 'String'>
   readonly description: Prisma.FieldRef<"Video", 'String'>
+  readonly mediaType: Prisma.FieldRef<"Video", 'MediaType'>
   readonly status: Prisma.FieldRef<"Video", 'VideoStatus'>
   readonly originalSize: Prisma.FieldRef<"Video", 'BigInt'>
   readonly processedSize: Prisma.FieldRef<"Video", 'BigInt'>
