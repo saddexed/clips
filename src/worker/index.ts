@@ -21,10 +21,7 @@ async function processVideo(job: Job) {
     data: { status: "PROCESSING" },
   });
 
-  const jobHistory = await prisma.jobHistory.findFirst({
-    where: { videoId, status: "PENDING", jobType: "TRANSCODE" },
-    orderBy: { startedAt: "desc" },
-  });
+  // We no longer pre-fetch jobHistory because it is not created until completion.
 
   const videoRecord = await prisma.video.findUnique({
     where: { id: videoId },
@@ -153,13 +150,8 @@ async function processVideo(job: Job) {
         }
       });
 
-      // 3. Update Transcode StartedAt so it sits correctly on top of Thumbnail chronologically
-      if (jobHistory) {
-        await prisma.jobHistory.update({
-          where: { id: jobHistory.id },
-          data: { startedAt: new Date() }
-        });
-      }
+      // 3. Mark Transcode start time so it sits correctly chronologically
+      const transcodeStartedAt = new Date();
 
       console.log(`[Worker] Transcoding to WebM for ${videoId}`);
       const processedDir = path.join(DATA_PATH, "processed");
@@ -195,16 +187,17 @@ async function processVideo(job: Job) {
         },
       });
 
-      if (jobHistory) {
-        await prisma.jobHistory.update({
-          where: { id: jobHistory.id },
-          data: {
-            status: "COMPLETED",
-            completedAt: new Date(),
-            processedSize: processedStats.size,
-          },
-        });
-      }
+      await prisma.jobHistory.create({
+        data: {
+          videoId,
+          jobType: "TRANSCODE",
+          status: "COMPLETED",
+          startedAt: transcodeStartedAt,
+          completedAt: new Date(),
+          originalSize: videoRecord.originalSize,
+          processedSize: processedStats.size,
+        },
+      });
 
       console.log(`[Worker] Finished processing video ${videoId}`);
     }
@@ -217,28 +210,15 @@ async function processVideo(job: Job) {
       data: { status: "FAILED" },
     });
 
-    if (jobHistory) {
-      await prisma.jobHistory.update({
-        where: { id: jobHistory.id },
-        data: {
-          status: "FAILED",
-          completedAt: new Date(),
-          errorMessage: error instanceof Error ? error.message : "Unknown error",
-        },
-      });
-    } else {
-      // For images, we don't create a pending TRANSCODE history row proactively.
-      // If it fails, we need to explicitly inject one so the user sees it in the UI.
-      await prisma.jobHistory.create({
-        data: {
-          videoId,
-          jobType: "TRANSCODE",
-          status: "FAILED",
-          completedAt: new Date(),
-          errorMessage: error instanceof Error ? error.message : "Unknown image processing error",
-        }
-      });
-    }
+    await prisma.jobHistory.create({
+      data: {
+        videoId,
+        jobType: "TRANSCODE",
+        status: "FAILED",
+        completedAt: new Date(),
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+      }
+    });
 
     throw error;
   }

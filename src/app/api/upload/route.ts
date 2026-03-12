@@ -88,17 +88,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 3. Add pending TRANSCODE entry for VIDEOS only
-    if (isVideo) {
-      await prisma.jobHistory.create({
-        data: {
-          videoId: video.id,
-          jobType: "TRANSCODE",
-          status: "PENDING",
-          originalSize: file.size,
-        },
-      });
-    }
+    // Removed eager pending TRANSCODE entry to ensure logs.
 
     // 4. Enqueue the work to BullMQ
     await videoQueue.add("process-video", {

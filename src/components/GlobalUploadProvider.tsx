@@ -1,7 +1,7 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { UploadCloud, X, CheckCircle2, AlertCircle, Plus } from 'lucide-react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo } from 'react';
+import { UploadCloud, X, CheckCircle2, AlertCircle, Plus, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 type UploadStatus = 'pending' | 'uploading' | 'success' | 'error';
@@ -158,6 +158,19 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // 4. Compute overall progress for the minimized tracker
+  const combinedProgress = useMemo(() => {
+    if (uploads.length === 0) return 0;
+    const totalSelected = uploads.length * 100;
+    const currentAbsolute = uploads.reduce((acc, curr) => acc + curr.progress, 0);
+    return Math.floor((currentAbsolute / totalSelected) * 100);
+  }, [uploads]);
+
+  const activeUploads = uploads.filter(u => u.status === 'uploading' || u.status === 'pending').length;
+  const errorUploads = uploads.filter(u => u.status === 'error').length;
+  const completedUploads = uploads.filter(u => u.status === 'success').length;
+  const showMiniTracker = !isOverlayOpen && uploads.length > 0;
+
   return (
     <GlobalUploadContext.Provider value={{ uploads, addFiles, removeUpload, clearCompleted, isOverlayOpen, setOverlayOpen }}>
       {children}
@@ -214,7 +227,7 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
         onClick={() => document.getElementById('global-os-file-picker')?.click()}
         style={{
           position: 'fixed',
-          bottom: '2rem',
+          bottom: showMiniTracker ? '6rem' : '2rem', // shift up if mini tracker is visible
           right: '2rem',
           width: '64px',
           height: '64px',
@@ -228,13 +241,73 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
           justifyContent: 'center',
           cursor: 'pointer',
           zIndex: 50,
-          transition: 'transform 0.2s',
+          transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
         onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05) translateY(-2px)'}
         onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1) translateY(0)'}
       >
         <Plus size={32} />
       </button>
+
+      {/* The Minimized Progress Tracker */}
+      {showMiniTracker && (
+        <div 
+          onClick={() => setOverlayOpen(true)}
+          className="glass-panel animate-in"
+          style={{
+            position: 'fixed',
+            bottom: '1.5rem',
+            right: '1.5rem',
+            width: '320px',
+            padding: '1rem',
+            borderRadius: 'var(--radius)',
+            background: 'var(--card)',
+            border: '1px solid var(--border)',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
+            cursor: 'pointer',
+            zIndex: 49,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.75rem',
+            transition: 'transform 0.2s',
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+          onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 500 }}>
+              {activeUploads > 0 ? (
+                <Loader2 size={16} className="text-blue-400 animate-spin" />
+              ) : errorUploads > 0 ? (
+                <AlertCircle size={16} className="text-red-400" />
+              ) : (
+                <CheckCircle2 size={16} className="text-green-400" />
+              )}
+              <span style={{ fontSize: '0.9rem' }}>
+                {activeUploads > 0 ? `Uploading ${activeUploads} file${activeUploads > 1 ? 's' : ''}...` : 
+                 errorUploads > 0 ? `${errorUploads} failed` : 'Uploads complete'}
+              </span>
+            </div>
+            {activeUploads > 0 && <span style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)' }}>{combinedProgress}%</span>}
+          </div>
+
+          <div style={{ height: '4px', background: 'var(--secondary)', borderRadius: '999px', overflow: 'hidden' }}>
+            <div 
+              style={{ 
+                height: '100%', 
+                width: `${combinedProgress}%`, 
+                background: errorUploads > 0 && activeUploads === 0 ? '#f87171' : (activeUploads === 0 ? '#4ade80' : 'var(--foreground)'), 
+                transition: 'width 0.3s ease, background-color 0.3s' 
+              }} 
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>
+            <span>{completedUploads} / {uploads.length} finished</span>
+            <span>Click to view details</span>
+          </div>
+        </div>
+      )}
 
       {/* The Active Uploads Overlay Pane */}
       {isOverlayOpen && (
