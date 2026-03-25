@@ -62,6 +62,9 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(bytes);
     await writeFile(filePath, buffer);
     
+    const lastModifiedStr = formData.get("lastModified")?.toString();
+    const clientDate = lastModifiedStr ? new Date(parseInt(lastModifiedStr, 10)) : undefined;
+
     // 1. Create the Database Record (UPLOADING -> QUEUED)
     const video = await prisma.video.create({
       data: {
@@ -74,6 +77,7 @@ export async function POST(request: NextRequest) {
         mediaType: isImage ? "IMAGE" : "VIDEO",
         originalSize: file.size,
         originalMetadata: { originalFilename: file.name, contentType: file.type }, // Store original name in metadata
+        ...(clientDate && !isNaN(clientDate.getTime()) ? { createdAt: clientDate, date: clientDate } : {})
       },
     });
 

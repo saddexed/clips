@@ -57,6 +57,8 @@ export type VideoMinAggregateOutputType = {
   width: number | null
   height: number | null
   createdAt: Date | null
+  uploadedAt: Date | null
+  date: Date | null
   updatedAt: Date | null
   deletedAt: Date | null
   isHidden: boolean | null
@@ -77,6 +79,8 @@ export type VideoMaxAggregateOutputType = {
   width: number | null
   height: number | null
   createdAt: Date | null
+  uploadedAt: Date | null
+  date: Date | null
   updatedAt: Date | null
   deletedAt: Date | null
   isHidden: boolean | null
@@ -98,6 +102,8 @@ export type VideoCountAggregateOutputType = {
   width: number
   height: number
   createdAt: number
+  uploadedAt: number
+  date: number
   updatedAt: number
   deletedAt: number
   isHidden: number
@@ -136,6 +142,8 @@ export type VideoMinAggregateInputType = {
   width?: true
   height?: true
   createdAt?: true
+  uploadedAt?: true
+  date?: true
   updatedAt?: true
   deletedAt?: true
   isHidden?: true
@@ -156,6 +164,8 @@ export type VideoMaxAggregateInputType = {
   width?: true
   height?: true
   createdAt?: true
+  uploadedAt?: true
+  date?: true
   updatedAt?: true
   deletedAt?: true
   isHidden?: true
@@ -177,6 +187,8 @@ export type VideoCountAggregateInputType = {
   width?: true
   height?: true
   createdAt?: true
+  uploadedAt?: true
+  date?: true
   updatedAt?: true
   deletedAt?: true
   isHidden?: true
@@ -285,6 +297,8 @@ export type VideoGroupByOutputType = {
   width: number | null
   height: number | null
   createdAt: Date
+  uploadedAt: Date
+  date: Date
   updatedAt: Date
   deletedAt: Date | null
   isHidden: boolean
@@ -329,6 +343,8 @@ export type VideoWhereInput = {
   width?: Prisma.IntNullableFilter<"Video"> | number | null
   height?: Prisma.IntNullableFilter<"Video"> | number | null
   createdAt?: Prisma.DateTimeFilter<"Video"> | Date | string
+  uploadedAt?: Prisma.DateTimeFilter<"Video"> | Date | string
+  date?: Prisma.DateTimeFilter<"Video"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Video"> | Date | string
   deletedAt?: Prisma.DateTimeNullableFilter<"Video"> | Date | string | null
   isHidden?: Prisma.BoolFilter<"Video"> | boolean
@@ -353,6 +369,8 @@ export type VideoOrderByWithRelationInput = {
   width?: Prisma.SortOrderInput | Prisma.SortOrder
   height?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
+  uploadedAt?: Prisma.SortOrder
+  date?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   deletedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   isHidden?: Prisma.SortOrder
@@ -380,6 +398,8 @@ export type VideoWhereUniqueInput = Prisma.AtLeast<{
   width?: Prisma.IntNullableFilter<"Video"> | number | null
   height?: Prisma.IntNullableFilter<"Video"> | number | null
   createdAt?: Prisma.DateTimeFilter<"Video"> | Date | string
+  uploadedAt?: Prisma.DateTimeFilter<"Video"> | Date | string
+  date?: Prisma.DateTimeFilter<"Video"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Video"> | Date | string
   deletedAt?: Prisma.DateTimeNullableFilter<"Video"> | Date | string | null
   isHidden?: Prisma.BoolFilter<"Video"> | boolean
@@ -404,6 +424,8 @@ export type VideoOrderByWithAggregationInput = {
   width?: Prisma.SortOrderInput | Prisma.SortOrder
   height?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
+  uploadedAt?: Prisma.SortOrder
+  date?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   deletedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   isHidden?: Prisma.SortOrder
@@ -433,6 +455,8 @@ export type VideoScalarWhereWithAggregatesInput = {
   width?: Prisma.IntNullableWithAggregatesFilter<"Video"> | number | null
   height?: Prisma.IntNullableWithAggregatesFilter<"Video"> | number | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"Video"> | Date | string
+  uploadedAt?: Prisma.DateTimeWithAggregatesFilter<"Video"> | Date | string
+  date?: Prisma.DateTimeWithAggregatesFilter<"Video"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"Video"> | Date | string
   deletedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Video"> | Date | string | null
   isHidden?: Prisma.BoolWithAggregatesFilter<"Video"> | boolean
@@ -454,6 +478,8 @@ export type VideoCreateInput = {
   width?: number | null
   height?: number | null
   createdAt?: Date | string
+  uploadedAt?: Date | string
+  date?: Date | string
   updatedAt?: Date | string
   deletedAt?: Date | string | null
   isHidden?: boolean
@@ -478,6 +504,8 @@ export type VideoUncheckedCreateInput = {
   width?: number | null
   height?: number | null
   createdAt?: Date | string
+  uploadedAt?: Date | string
+  date?: Date | string
   updatedAt?: Date | string
   deletedAt?: Date | string | null
   isHidden?: boolean
@@ -502,6 +530,8 @@ export type VideoUpdateInput = {
   width?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  uploadedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -526,6 +556,8 @@ export type VideoUncheckedUpdateInput = {
   width?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  uploadedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -550,6 +582,8 @@ export type VideoCreateManyInput = {
   width?: number | null
   height?: number | null
   createdAt?: Date | string
+  uploadedAt?: Date | string
+  date?: Date | string
   updatedAt?: Date | string
   deletedAt?: Date | string | null
   isHidden?: boolean
@@ -571,6 +605,8 @@ export type VideoUpdateManyMutationInput = {
   width?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  uploadedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -592,6 +628,8 @@ export type VideoUncheckedUpdateManyInput = {
   width?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  uploadedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -613,6 +651,8 @@ export type VideoCountOrderByAggregateInput = {
   width?: Prisma.SortOrder
   height?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
+  uploadedAt?: Prisma.SortOrder
+  date?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   deletedAt?: Prisma.SortOrder
   isHidden?: Prisma.SortOrder
@@ -641,6 +681,8 @@ export type VideoMaxOrderByAggregateInput = {
   width?: Prisma.SortOrder
   height?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
+  uploadedAt?: Prisma.SortOrder
+  date?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   deletedAt?: Prisma.SortOrder
   isHidden?: Prisma.SortOrder
@@ -661,6 +703,8 @@ export type VideoMinOrderByAggregateInput = {
   width?: Prisma.SortOrder
   height?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
+  uploadedAt?: Prisma.SortOrder
+  date?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   deletedAt?: Prisma.SortOrder
   isHidden?: Prisma.SortOrder
@@ -830,6 +874,8 @@ export type VideoCreateWithoutCommentsInput = {
   width?: number | null
   height?: number | null
   createdAt?: Date | string
+  uploadedAt?: Date | string
+  date?: Date | string
   updatedAt?: Date | string
   deletedAt?: Date | string | null
   isHidden?: boolean
@@ -853,6 +899,8 @@ export type VideoUncheckedCreateWithoutCommentsInput = {
   width?: number | null
   height?: number | null
   createdAt?: Date | string
+  uploadedAt?: Date | string
+  date?: Date | string
   updatedAt?: Date | string
   deletedAt?: Date | string | null
   isHidden?: boolean
@@ -892,6 +940,8 @@ export type VideoUpdateWithoutCommentsInput = {
   width?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  uploadedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -915,6 +965,8 @@ export type VideoUncheckedUpdateWithoutCommentsInput = {
   width?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  uploadedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -938,6 +990,8 @@ export type VideoCreateWithoutTagsInput = {
   width?: number | null
   height?: number | null
   createdAt?: Date | string
+  uploadedAt?: Date | string
+  date?: Date | string
   updatedAt?: Date | string
   deletedAt?: Date | string | null
   isHidden?: boolean
@@ -961,6 +1015,8 @@ export type VideoUncheckedCreateWithoutTagsInput = {
   width?: number | null
   height?: number | null
   createdAt?: Date | string
+  uploadedAt?: Date | string
+  date?: Date | string
   updatedAt?: Date | string
   deletedAt?: Date | string | null
   isHidden?: boolean
@@ -1008,6 +1064,8 @@ export type VideoScalarWhereInput = {
   width?: Prisma.IntNullableFilter<"Video"> | number | null
   height?: Prisma.IntNullableFilter<"Video"> | number | null
   createdAt?: Prisma.DateTimeFilter<"Video"> | Date | string
+  uploadedAt?: Prisma.DateTimeFilter<"Video"> | Date | string
+  date?: Prisma.DateTimeFilter<"Video"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Video"> | Date | string
   deletedAt?: Prisma.DateTimeNullableFilter<"Video"> | Date | string | null
   isHidden?: Prisma.BoolFilter<"Video"> | boolean
@@ -1029,6 +1087,8 @@ export type VideoCreateWithoutJobHistoryInput = {
   width?: number | null
   height?: number | null
   createdAt?: Date | string
+  uploadedAt?: Date | string
+  date?: Date | string
   updatedAt?: Date | string
   deletedAt?: Date | string | null
   isHidden?: boolean
@@ -1052,6 +1112,8 @@ export type VideoUncheckedCreateWithoutJobHistoryInput = {
   width?: number | null
   height?: number | null
   createdAt?: Date | string
+  uploadedAt?: Date | string
+  date?: Date | string
   updatedAt?: Date | string
   deletedAt?: Date | string | null
   isHidden?: boolean
@@ -1091,6 +1153,8 @@ export type VideoUpdateWithoutJobHistoryInput = {
   width?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  uploadedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -1114,6 +1178,8 @@ export type VideoUncheckedUpdateWithoutJobHistoryInput = {
   width?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  uploadedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -1137,6 +1203,8 @@ export type VideoUpdateWithoutTagsInput = {
   width?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  uploadedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -1160,6 +1228,8 @@ export type VideoUncheckedUpdateWithoutTagsInput = {
   width?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  uploadedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -1183,6 +1253,8 @@ export type VideoUncheckedUpdateManyWithoutTagsInput = {
   width?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  uploadedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -1253,6 +1325,8 @@ export type VideoSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   width?: boolean
   height?: boolean
   createdAt?: boolean
+  uploadedAt?: boolean
+  date?: boolean
   updatedAt?: boolean
   deletedAt?: boolean
   isHidden?: boolean
@@ -1278,6 +1352,8 @@ export type VideoSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   width?: boolean
   height?: boolean
   createdAt?: boolean
+  uploadedAt?: boolean
+  date?: boolean
   updatedAt?: boolean
   deletedAt?: boolean
   isHidden?: boolean
@@ -1299,6 +1375,8 @@ export type VideoSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   width?: boolean
   height?: boolean
   createdAt?: boolean
+  uploadedAt?: boolean
+  date?: boolean
   updatedAt?: boolean
   deletedAt?: boolean
   isHidden?: boolean
@@ -1320,12 +1398,14 @@ export type VideoSelectScalar = {
   width?: boolean
   height?: boolean
   createdAt?: boolean
+  uploadedAt?: boolean
+  date?: boolean
   updatedAt?: boolean
   deletedAt?: boolean
   isHidden?: boolean
 }
 
-export type VideoOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "filename" | "originalPath" | "processedPath" | "originalMetadata" | "title" | "description" | "mediaType" | "status" | "originalSize" | "processedSize" | "duration" | "width" | "height" | "createdAt" | "updatedAt" | "deletedAt" | "isHidden", ExtArgs["result"]["video"]>
+export type VideoOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "filename" | "originalPath" | "processedPath" | "originalMetadata" | "title" | "description" | "mediaType" | "status" | "originalSize" | "processedSize" | "duration" | "width" | "height" | "createdAt" | "uploadedAt" | "date" | "updatedAt" | "deletedAt" | "isHidden", ExtArgs["result"]["video"]>
 export type VideoInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   comments?: boolean | Prisma.Video$commentsArgs<ExtArgs>
   tags?: boolean | Prisma.Video$tagsArgs<ExtArgs>
@@ -1358,6 +1438,8 @@ export type $VideoPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs 
     width: number | null
     height: number | null
     createdAt: Date
+    uploadedAt: Date
+    date: Date
     updatedAt: Date
     deletedAt: Date | null
     isHidden: boolean
@@ -1802,6 +1884,8 @@ export interface VideoFieldRefs {
   readonly width: Prisma.FieldRef<"Video", 'Int'>
   readonly height: Prisma.FieldRef<"Video", 'Int'>
   readonly createdAt: Prisma.FieldRef<"Video", 'DateTime'>
+  readonly uploadedAt: Prisma.FieldRef<"Video", 'DateTime'>
+  readonly date: Prisma.FieldRef<"Video", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"Video", 'DateTime'>
   readonly deletedAt: Prisma.FieldRef<"Video", 'DateTime'>
   readonly isHidden: Prisma.FieldRef<"Video", 'Boolean'>

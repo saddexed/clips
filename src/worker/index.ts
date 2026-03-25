@@ -12,6 +12,18 @@ const connection = new Redis(process.env.REDIS_URL || "redis://localhost:6379", 
 
 const DATA_PATH = path.resolve(process.cwd(), process.env.DATA_PATH || "/app/data");
 
+function getOldestDate(dates: (Date | number | string | undefined | null)[]): Date | undefined {
+  let oldest: Date | undefined;
+  for (const d of dates) {
+    if (!d) continue;
+    const date = new Date(d);
+    // Ignore invalid dates and the Unix Epoch (zero date, often used as default empty)
+    if (isNaN(date.getTime()) || date.getTime() === 0) continue; 
+    if (!oldest || date < oldest) oldest = date;
+  }
+  return oldest;
+}
+
 async function processVideo(job: Job) {
   const { videoId } = job.data;
   console.log(`[Worker] Started processing video ${videoId}`);
@@ -41,6 +53,13 @@ async function processVideo(job: Job) {
       // --- IMAGE PROCESSING PIPELINE ---
       console.log(`[Worker] Extracting metadata for image ${videoId}`);
       const metadata = await sharp(filePath).metadata();
+      const originalStats = await stat(filePath);
+      const oldestDate = getOldestDate([
+        videoRecord.createdAt,
+        originalStats.birthtime, 
+        originalStats.mtime, 
+        originalStats.atime
+      ]);
       
       const existingMeta = (videoRecord.originalMetadata as Record<string, any>) || {};
 
@@ -49,6 +68,8 @@ async function processVideo(job: Job) {
         data: {
           width: metadata.width,
           height: metadata.height,
+          createdAt: oldestDate,
+          date: oldestDate,
           originalMetadata: {
             ...existingMeta,
             format: metadata.format,
@@ -57,7 +78,6 @@ async function processVideo(job: Job) {
         },
       });
 
-      const originalStats = await stat(filePath);
       const baseName = path.parse(filename).name;
 
       console.log(`[Worker] Attempting WebP conversion for ${videoId}`);
@@ -112,6 +132,15 @@ async function processVideo(job: Job) {
       // --- VIDEO PROCESSING PIPELINE ---
       console.log(`[Worker] Extracting metadata for video ${videoId}`);
       const metadata = await extractMetadata(filePath);
+      const originalStats = await stat(filePath);
+      
+      const oldestDate = getOldestDate([
+        videoRecord.createdAt,
+        originalStats.birthtime, 
+        originalStats.mtime, 
+        originalStats.atime, 
+        metadata.creation_time
+      ]);
       
       const existingMeta = (videoRecord.originalMetadata as Record<string, any>) || {};
 
@@ -121,6 +150,8 @@ async function processVideo(job: Job) {
           duration: metadata.duration,
           width: metadata.width,
           height: metadata.height,
+          createdAt: oldestDate,
+          date: oldestDate,
           originalMetadata: {
             ...existingMeta,
             ...(metadata.raw as object)

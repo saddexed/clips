@@ -14,7 +14,7 @@ export const metadata = {
 export default async function Home() {
   const videos = await prisma.video.findMany({
     where: { status: 'COMPLETED', deletedAt: null, isHidden: false },
-    orderBy: { createdAt: 'desc' }
+    orderBy: { date: 'desc' }
   });
 
   return (
@@ -73,7 +73,7 @@ export default async function Home() {
                       {video.title || video.filename}
                     </h3>
                     <div style={{ fontSize: '0.875rem', color: 'var(--muted-foreground)', marginTop: 'auto', paddingTop: '1rem' }}>
-                       {new Date(video.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                       {new Date(video.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                     </div>
                   </div>
                 </div>

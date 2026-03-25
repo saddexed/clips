@@ -1,15 +1,18 @@
 # ── Stage 1: Dependencies ──────────────────────────────────────────────
 FROM node:20-alpine AS deps
+# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm install --omit=dev
+RUN npm ci --omit=dev
 
 # ── Stage 2: Build ─────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 WORKDIR /app
+RUN apk add --no-cache libc6-compat
 
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm ci
 
 # Copy all source including prisma config and schema
 COPY . .
@@ -36,31 +39,35 @@ RUN apk add --no-cache ffmpeg
 RUN addgroup --system --gid 1001 nodejs \
     && adduser  --system --uid 1001 nextjs
 
-# Create the four workflow directories
+# Create the four workflow directories and assign ownership
 RUN mkdir -p /app/data/temp \
              /app/data/processing \
              /app/data/processed \
-             /app/data/vault
+             /app/data/vault \
+    && chown -R nextjs:nodejs /app/data
 
 # Copy standalone build output
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 # Copy full production node_modules for the worker script
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
 
 # Copy full source for worker (tsx execution)
-COPY --from=builder /app/src ./src
+COPY --from=builder --chown=nextjs:nodejs /app/src ./src
 
 # Copy Prisma artifacts (schema, migrations, generated client)
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
-COPY --from=builder /app/src/generated ./src/generated
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./prisma.config.ts
+COPY --from=builder --chown=nextjs:nodejs /app/src/generated ./src/generated
 
 EXPOSE 6119
 
 ENV PORT=6119
 ENV HOSTNAME="0.0.0.0"
+
+# Switch to non-root user before running
+USER nextjs
 
 CMD ["node", "server.js"]

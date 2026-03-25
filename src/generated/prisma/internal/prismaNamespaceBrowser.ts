@@ -89,6 +89,8 @@ export const VideoScalarFieldEnum = {
   width: 'width',
   height: 'height',
   createdAt: 'createdAt',
+  uploadedAt: 'uploadedAt',
+  date: 'date',
   updatedAt: 'updatedAt',
   deletedAt: 'deletedAt',
   isHidden: 'isHidden'

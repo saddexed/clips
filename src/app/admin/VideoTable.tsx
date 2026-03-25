@@ -19,6 +19,8 @@ type Video = {
   originalSize: bigint | number;
   processedSize: bigint | number;
   createdAt: Date;
+  uploadedAt: Date;
+  date: Date;
   tags: { name: string }[];
   originalMetadata?: any;
   isHidden: boolean;
@@ -138,7 +140,7 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
                     {getCompressionInfo(vid.originalSize, vid.processedSize).columnStr}
                   </td>
                   <td style={{ color: 'var(--muted-foreground)' }}>
-                    {new Date(vid.createdAt).toLocaleString(undefined, { 
+                    {new Date(vid.uploadedAt).toLocaleString(undefined, { 
                       year: 'numeric', month: 'numeric', day: 'numeric', 
                       hour: '2-digit', minute: '2-digit'
                     })}
@@ -203,6 +205,38 @@ function EditVideoModal({ video, onClose, onSave, onDelete }: { video: Video, on
   const [title, setTitle] = useState(video.title);
   const [description, setDescription] = useState(video.description);
   const [tagsInput, setTagsInput] = useState(video.tags?.map(t => t.name).join(', ') || '');
+  
+  const [activeTab, setActiveTab] = useState<'edit' | 'metadata'>('edit');
+  
+  // Infer active mode from the value of video.date
+  const activeParsedDate = new Date(video.date || video.createdAt).getTime();
+  const originalParsedDate = new Date(video.createdAt).getTime();
+  const uploadParsedDate = new Date(video.uploadedAt).getTime();
+  
+  const isUploadMode = activeParsedDate === uploadParsedDate && activeParsedDate !== originalParsedDate;
+  const isOriginalMode = activeParsedDate === originalParsedDate;
+  
+  const [dateMode, setDateMode] = useState<'original' | 'upload' | 'custom'>(
+    isUploadMode ? 'upload' : 
+    isOriginalMode ? 'original' : 
+    'custom'
+  );
+
+  // Format dates for datetime-local input
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  
+  const initialCustomDate = new Date(video.date || video.createdAt);
+  const initialCustomDateStr = `${initialCustomDate.getFullYear()}-${pad(initialCustomDate.getMonth() + 1)}-${pad(initialCustomDate.getDate())}T${pad(initialCustomDate.getHours())}:${pad(initialCustomDate.getMinutes())}`;
+  const [customDate, setCustomDate] = useState(initialCustomDateStr);
+
+  const originalDate = new Date(video.createdAt);
+  const originalDateStr = `${originalDate.getFullYear()}-${pad(originalDate.getMonth() + 1)}-${pad(originalDate.getDate())}T${pad(originalDate.getHours())}:${pad(originalDate.getMinutes())}`;
+
+  const uploadDate = new Date(video.uploadedAt);
+  const uploadDateStr = `${uploadDate.getFullYear()}-${pad(uploadDate.getMonth() + 1)}-${pad(uploadDate.getDate())}T${pad(uploadDate.getHours())}:${pad(uploadDate.getMinutes())}`;
+
+  const displayDate = dateMode === 'custom' ? customDate : dateMode === 'upload' ? uploadDateStr : originalDateStr;
+
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const [mounted, setMounted] = useState(false);
@@ -221,13 +255,19 @@ function EditVideoModal({ video, onClose, onSave, onDelete }: { video: Video, on
         .map(t => t.trim())
         .filter(t => t.length > 0);
 
+      const payloadDate = 
+        dateMode === 'original' ? video.createdAt 
+        : dateMode === 'upload' ? video.uploadedAt 
+        : new Date(customDate);
+
       const res = await fetch(`/api/videos/${video.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title,
           description,
-          tags: tagsArray
+          tags: tagsArray,
+          date: new Date(payloadDate).toISOString(),
         })
       });
 
@@ -302,83 +342,221 @@ function EditVideoModal({ video, onClose, onSave, onDelete }: { video: Video, on
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', marginBottom: '2rem' }}>
-          {/* Left Column: Player & Metadata */}
-          <div style={{ flex: '2 1 500px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {video.status === 'COMPLETED' ? (
-              video.mediaType === 'IMAGE' ? (
-                <div style={{ width: '100%', background: '#000', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                  <img 
-                    src={`/v/${video.id}`} 
-                    alt={video.originalMetadata?.originalFilename || video.title} 
-                    style={{ width: '100%', maxHeight: '600px', objectFit: 'contain', display: 'block' }}
-                  />
-                </div>
-              ) : (
-                <SafeVideoPlayer 
-                  src={`/v/${video.id}`} 
-                />
-              )
-            ) : (
-              <div style={{ width: '100%', aspectRatio: '16/9', background: 'var(--card)', borderRadius: 'var(--radius)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: video.status === 'FAILED' ? '#ef4444' : 'var(--muted-foreground)', gap: '1rem', border: video.status === 'FAILED' ? '1px solid rgba(239,68,68,0.3)' : '1px solid var(--border)' }}>
-                {video.status === 'FAILED' ? (
-                   <>
-                     <AlertTriangle size={32} />
-                     <span style={{ fontWeight: 500 }}>Processing Failed</span>
-                     <span style={{ fontSize: '0.875rem', opacity: 0.8 }}>This media could not be processed.</span>
-                   </>
+        {/* Tab Navigation */}
+        <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem' }}>
+          <button
+            type="button"
+            onClick={() => setActiveTab('edit')}
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'edit' ? '2px solid var(--foreground)' : '2px solid transparent',
+              color: activeTab === 'edit' ? 'var(--foreground)' : 'var(--muted-foreground)',
+              fontWeight: activeTab === 'edit' ? 600 : 400,
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('metadata')}
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'metadata' ? '2px solid var(--foreground)' : '2px solid transparent',
+              color: activeTab === 'metadata' ? 'var(--foreground)' : 'var(--muted-foreground)',
+              fontWeight: activeTab === 'metadata' ? 600 : 400,
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            Metadata
+          </button>
+        </div>
+
+        {activeTab === 'edit' && (
+          <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', marginBottom: '2rem' }}>
+            {/* Left Column: Player & Metadata */}
+            <div style={{ flex: '2 1 500px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {video.status === 'COMPLETED' ? (
+                video.mediaType === 'IMAGE' ? (
+                  <div style={{ width: '100%', background: '#000', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                    <img 
+                      src={`/v/${video.id}`} 
+                      alt={video.originalMetadata?.originalFilename || video.title} 
+                      style={{ width: '100%', maxHeight: '600px', objectFit: 'contain', display: 'block' }}
+                    />
+                  </div>
                 ) : (
-                   <>
-                     <Activity size={32} className="text-blue-400" />
-                     <span style={{ fontWeight: 500 }}>Currently Processing</span>
-                     <span style={{ fontSize: '0.875rem', opacity: 0.8 }}>Please wait for the background worker.</span>
-                   </>
-                )}
+                  <SafeVideoPlayer 
+                    src={`/v/${video.id}`} 
+                  />
+                )
+              ) : (
+                <div style={{ width: '100%', aspectRatio: '16/9', background: 'var(--card)', borderRadius: 'var(--radius)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: video.status === 'FAILED' ? '#ef4444' : 'var(--muted-foreground)', gap: '1rem', border: video.status === 'FAILED' ? '1px solid rgba(239,68,68,0.3)' : '1px solid var(--border)' }}>
+                  {video.status === 'FAILED' ? (
+                     <>
+                       <AlertTriangle size={32} />
+                       <span style={{ fontWeight: 500 }}>Processing Failed</span>
+                       <span style={{ fontSize: '0.875rem', opacity: 0.8 }}>This media could not be processed.</span>
+                     </>
+                  ) : (
+                     <>
+                       <Activity size={32} className="text-blue-400" />
+                       <span style={{ fontWeight: 500 }}>Currently Processing</span>
+                       <span style={{ fontSize: '0.875rem', opacity: 0.8 }}>Please wait for the background worker.</span>
+                     </>
+                  )}
+                </div>
+              )}
+              
+            </div>
+
+            {/* Right Column: Editable Fields */}
+            <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>Title</label>
+                <input 
+                  type="text" 
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  style={{ width: '100%', padding: '0.75rem', background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--foreground)' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>Description</label>
+                <textarea 
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  style={{ width: '100%', padding: '0.75rem', background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--foreground)', resize: 'vertical' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>Tags (comma separated)</label>
+                <input 
+                  type="text" 
+                  value={tagsInput}
+                  onChange={(e) => setTagsInput(e.target.value)}
+                  placeholder="e.g. funny, headshot, win"
+                  style={{ width: '100%', padding: '0.75rem', background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--foreground)' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>Date Mode</label>
+                
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', fontSize: '0.875rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setDateMode('original')}
+                    style={{
+                      flex: 1,
+                      padding: '0.5rem 0.2rem',
+                      borderRadius: 'var(--radius)',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontWeight: dateMode === 'original' ? 600 : 400,
+                      background: dateMode === 'original' ? '#55c4fa' : 'var(--secondary)',
+                      color: dateMode === 'original' ? '#000' : 'var(--muted-foreground)',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    Original
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDateMode('upload')}
+                    style={{
+                      flex: 1,
+                      padding: '0.5rem 0.2rem',
+                      borderRadius: 'var(--radius)',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontWeight: dateMode === 'upload' ? 600 : 400,
+                      background: dateMode === 'upload' ? '#55c4fa' : 'var(--secondary)',
+                      color: dateMode === 'upload' ? '#000' : 'var(--muted-foreground)',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    Upload
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDateMode('custom')}
+                    style={{
+                      flex: 1,
+                      padding: '0.5rem 0.2rem',
+                      borderRadius: 'var(--radius)',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontWeight: dateMode === 'custom' ? 600 : 400,
+                      background: dateMode === 'custom' ? '#55c4fa' : 'var(--secondary)',
+                      color: dateMode === 'custom' ? '#000' : 'var(--muted-foreground)',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    Custom
+                  </button>
+                </div>
+
+                <input 
+                  type="datetime-local" 
+                  value={displayDate}
+                  onChange={(e) => setCustomDate(e.target.value)}
+                  disabled={dateMode !== 'custom'}
+                  style={{ 
+                    width: '100%', 
+                    padding: '0.75rem', 
+                    background: dateMode === 'custom' ? 'var(--background)' : 'var(--secondary)', 
+                    border: '1px solid var(--border)', 
+                    borderRadius: 'var(--radius)', 
+                    color: dateMode === 'custom' ? 'var(--foreground)' : 'var(--muted-foreground)', 
+                    colorScheme: 'dark',
+                    cursor: dateMode === 'custom' ? 'text' : 'not-allowed',
+                    opacity: dateMode === 'custom' ? 1 : 0.7
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'metadata' && (
+          <div style={{ marginBottom: '2rem' }}>
+            <div style={{ background: 'var(--secondary)', padding: '1.5rem', borderRadius: 'var(--radius)', overflowX: 'auto', maxHeight: '600px', fontSize: '0.875rem', lineHeight: '1.8', wordBreak: 'break-all' }}>
+              <strong>ID:</strong> {video.id}<br/>
+              <strong>Original Filename:</strong> {video.originalMetadata?.originalFilename || video.filename}<br/>
+              <strong>Filename:</strong> {video.filename}<br/>
+              <strong>Title:</strong> {video.title}<br/>
+              <strong>Status:</strong> {video.status}<br/>
+              <strong>Media Type:</strong> {video.mediaType || 'N/A'}<br/>
+              <strong>Duration:</strong> {video.duration !== null ? `${video.duration}s` : 'N/A'}<br/>
+              <strong>Dimensions:</strong> {video.width && video.height ? `${video.width}x${video.height}` : 'N/A'}<br/>
+              <strong>Size:</strong> {getCompressionInfo(video.originalSize, video.processedSize).editStr}<br/>
+              <strong>Uploaded At:</strong> {new Date(video.uploadedAt).toLocaleString()}<br/>
+              <strong>Recorded At:</strong> {new Date(video.createdAt).toLocaleString()}<br/>
+              {(video as any).updatedAt && (
+                <><strong>Updated At:</strong> {new Date((video as any).updatedAt).toLocaleString()}<br/></>
+              )}
+            </div>
+            
+            {video.originalMetadata && (
+              <div style={{ marginTop: '1rem', background: '#09090b', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.5rem', overflowX: 'auto', maxHeight: '400px' }}>
+                <h4 style={{ marginBottom: '1rem', fontSize: '0.875rem', fontWeight: 600, color: 'var(--muted-foreground)' }}>Raw JSON Metadata</h4>
+                <pre style={{ color: '#d4d4d8', fontSize: '0.875rem', fontFamily: 'var(--font-mono)' }}>
+                  {JSON.stringify(video.originalMetadata, (key, value) => typeof value === 'bigint' ? value.toString() : value, 2)}
+                </pre>
               </div>
             )}
-            
-            <div style={{ fontSize: '0.875rem', background: 'var(--secondary)', padding: '0.75rem', borderRadius: 'var(--radius)', wordBreak: 'break-all' }}>
-              <strong>Original Filename:</strong> {video.originalMetadata?.originalFilename || video.filename}<br/>
-              <strong>Size:</strong> {getCompressionInfo(video.originalSize, video.processedSize).editStr}<br/>
-              <strong>Date:</strong> {new Date(video.createdAt).toLocaleString()}<br/>
-              <strong>ID:</strong> {video.id}
-            </div>
           </div>
-
-          {/* Right Column: Editable Fields */}
-          <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>Title</label>
-              <input 
-                type="text" 
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                style={{ width: '100%', padding: '0.75rem', background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--foreground)' }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>Description</label>
-              <textarea 
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-                style={{ width: '100%', padding: '0.75rem', background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--foreground)', resize: 'vertical' }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>Tags (comma separated)</label>
-              <input 
-                type="text" 
-                value={tagsInput}
-                onChange={(e) => setTagsInput(e.target.value)}
-                placeholder="e.g. funny, headshot, win"
-                style={{ width: '100%', padding: '0.75rem', background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--foreground)' }}
-              />
-            </div>
-          </div>
-        </div>
+        )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
           <button 

@@ -5,6 +5,7 @@ export type VideoMetadata = {
   width?: number;
   height?: number;
   format?: string;
+  creation_time?: string;
   raw: any;
 };
 
@@ -45,11 +46,31 @@ export async function extractMetadata(filePath: string): Promise<VideoMetadata> 
           (s: any) => s.codec_type === "video"
         );
 
+        const possibleDates: (string | undefined)[] = [
+          parsed.format?.tags?.creation_time,
+          videoStream?.tags?.creation_time,
+          ...(parsed.streams?.map((s: any) => s.tags?.creation_time) || [])
+        ];
+
+        let oldestCreationTime: string | undefined = undefined;
+        let oldestTimeMs = Infinity;
+
+        for (const d of possibleDates) {
+          if (!d) continue;
+          const timeMs = new Date(d).getTime();
+          // Filter out invalid dates and pick the oldest one
+          if (!isNaN(timeMs) && timeMs > 0 && timeMs < oldestTimeMs) {
+            oldestTimeMs = timeMs;
+            oldestCreationTime = d;
+          }
+        }
+
         resolve({
           duration: parsed.format?.duration ? parseFloat(parsed.format.duration) : undefined,
           width: videoStream?.width,
           height: videoStream?.height,
           format: parsed.format?.format_name,
+          creation_time: oldestCreationTime,
           raw: parsed,
         });
       } catch (err) {

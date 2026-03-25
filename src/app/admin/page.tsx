@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'; // Ensures this page isn't statically ca
 export default async function AdminManagePage() {
   const videos = await prisma.video.findMany({
     where: { deletedAt: null },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { uploadedAt: 'desc' },
     include: {
       tags: true, // Eager load tags for the editor
     }

@@ -11,13 +11,14 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, description, tags, isHidden } = body;
+    const { title, description, tags, isHidden, date } = body;
 
     // Build the update query dynamically
     const updateData: any = {};
     if (title !== undefined) updateData.title = title;
     if (description !== undefined) updateData.description = description;
     if (isHidden !== undefined) updateData.isHidden = isHidden;
+    if (date !== undefined) updateData.date = new Date(date);
 
     // Handle Tags (Many-to-Many relation)
     if (Array.isArray(tags)) {

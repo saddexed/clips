@@ -95,16 +95,24 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    const handlePaste = (e: ClipboardEvent) => {
+      if (e.clipboardData?.files && e.clipboardData.files.length > 0) {
+        addFiles(e.clipboardData.files);
+      }
+    };
+
     window.addEventListener('dragenter', handleDragEnter);
     window.addEventListener('dragleave', handleDragLeave);
     window.addEventListener('dragover', handleDragOver);
     window.addEventListener('drop', handleDrop);
+    window.addEventListener('paste', handlePaste);
 
     return () => {
       window.removeEventListener('dragenter', handleDragEnter);
       window.removeEventListener('dragleave', handleDragLeave);
       window.removeEventListener('dragover', handleDragOver);
       window.removeEventListener('drop', handleDrop);
+      window.removeEventListener('paste', handlePaste);
     };
   }, [addFiles]);
 
@@ -119,6 +127,7 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
         try {
           const formData = new FormData();
           formData.append('file', upload.file);
+          formData.append('lastModified', upload.file.lastModified.toString());
           
           const res = await fetch('/api/upload', {
             method: 'POST',

@@ -58,6 +58,8 @@ model Video {
   width            Int?
   height           Int?
   createdAt        DateTime    @default(now())
+  uploadedAt       DateTime    @default(now())
+  date             DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
   deletedAt        DateTime?
   isHidden         Boolean     @default(false)
