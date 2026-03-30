@@ -116,14 +116,32 @@ export async function DELETE(
     }
 
     // Log the event, burning the filename into the metadata before the video is erased
+    const videoName = video.title || video.filename;
     await prisma.jobHistory.create({
       data: {
         jobType: "DELETE",
         status: "COMPLETED",
         completedAt: new Date(),
-        metadata: { filename: video.title || video.filename, originalUUID: video.id, action: "Moved to .trashed", trashedPath }
+        metadata: { filename: videoName, originalUUID: video.id, action: "Moved to .trashed", trashedPath }
       }
     });
+
+    // Find all old jobs and burn the filename into their metadata so it persists past deletion
+    const existingJobs = await prisma.jobHistory.findMany({ where: { videoId: id } });
+    for (const job of existingJobs) {
+      if (job.jobType !== "DELETE") {
+        await prisma.jobHistory.update({
+          where: { id: job.id },
+          data: {
+            metadata: {
+              ...(job.metadata as any || {}),
+              filename: videoName,
+              originalUUID: id
+            }
+          }
+        });
+      }
+    }
 
     // Erase the source completely
     await prisma.video.delete({

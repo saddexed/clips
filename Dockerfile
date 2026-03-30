@@ -35,39 +35,31 @@ ENV DATA_PATH=/app/data
 # Install FFmpeg for video processing
 RUN apk add --no-cache ffmpeg
 
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs \
-    && adduser  --system --uid 1001 nextjs
-
-# Create the four workflow directories and assign ownership
+# Create the four workflow directories
 RUN mkdir -p /app/data/temp \
              /app/data/processing \
              /app/data/processed \
-             /app/data/vault \
-    && chown -R nextjs:nodejs /app/data
+             /app/data/vault
 
 # Copy standalone build output
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
 
 # Copy full production node_modules for the worker script
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --from=deps /app/node_modules ./node_modules
 
 # Copy full source for worker (tsx execution)
-COPY --from=builder --chown=nextjs:nodejs /app/src ./src
+COPY --from=builder /app/src ./src
 
 # Copy Prisma artifacts (schema, migrations, generated client)
-COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./prisma.config.ts
-COPY --from=builder --chown=nextjs:nodejs /app/src/generated ./src/generated
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
+COPY --from=builder /app/src/generated ./src/generated
 
 EXPOSE 6119
 
 ENV PORT=6119
 ENV HOSTNAME="0.0.0.0"
-
-# Switch to non-root user before running
-USER nextjs
 
 CMD ["node", "server.js"]

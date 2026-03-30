@@ -98,8 +98,6 @@ function getActionDetails(job: FlatHistoryItem) {
       return { icon: <Upload size={16} />, label: 'Upload', color: '#10b981' };
     case 'TRANSCODE':
       return { icon: <PlayCircle size={16} />, label: 'Transcode', color: '#3b82f6' };
-    case 'THUMBNAIL':
-      return { icon: <Image size={16} />, label: 'Thumbnail', color: '#06b6d4' };
     case 'EDIT':
       return { icon: <Pencil size={16} />, label: 'Edit', color: '#f59e0b' };
     case 'HIDE': {

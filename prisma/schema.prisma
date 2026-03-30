@@ -25,7 +25,6 @@ enum VideoStatus {
 enum JobType {
   UPLOAD
   TRANSCODE
-  THUMBNAIL
   METADATA_EXTRACT
   EDIT
   DELETE

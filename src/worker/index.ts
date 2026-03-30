@@ -3,7 +3,7 @@ import Redis from "ioredis";
 import { rename, stat, mkdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "../lib/prisma.js";
-import { extractMetadata, transcodeToWebM, extractThumbnail } from "../lib/ffmpeg.js";
+import { extractMetadata, transcodeToWebM } from "../lib/ffmpeg.js";
 import sharp from "sharp";
 
 const connection = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
@@ -163,23 +163,9 @@ async function processVideo(job: Job) {
         throw new Error("Could not determine video duration");
       }
 
-      // 2. Extract Thumbnail
-      console.log(`[Worker] Extracting thumbnail for ${videoId}`);
-      const thumbnailDir = path.join(DATA_PATH, ".thumbnails");
-      await mkdir(thumbnailDir, { recursive: true });
-      
+
+
       const baseName = path.parse(filename).name;
-      const thumbnailPath = path.join(thumbnailDir, `${videoId}.png`);
-      await extractThumbnail(filePath, thumbnailPath);
-      
-      await prisma.jobHistory.create({
-        data: {
-          videoId,
-          jobType: "THUMBNAIL",
-          status: "COMPLETED",
-          completedAt: new Date()
-        }
-      });
 
       // 3. Mark Transcode start time so it sits correctly chronologically
       const transcodeStartedAt = new Date();

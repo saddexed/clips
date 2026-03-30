@@ -31,7 +31,6 @@ export type VideoStatus = (typeof VideoStatus)[keyof typeof VideoStatus]
 export const JobType = {
   UPLOAD: 'UPLOAD',
   TRANSCODE: 'TRANSCODE',
-  THUMBNAIL: 'THUMBNAIL',
   METADATA_EXTRACT: 'METADATA_EXTRACT',
   EDIT: 'EDIT',
   DELETE: 'DELETE',
