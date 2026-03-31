@@ -13,9 +13,10 @@ function normalizeTags(tags: string[]): string[] {
     new Set(
       tags
         .map((t) => t.trim().toLowerCase())
+        .map((t) => t.replace(/_/g, " "))
         .filter(Boolean)
-        .map((t) => t.replace(/\s+/g, "-"))
-        .map((t) => t.replace(/[^a-z0-9-_]/g, ""))
+        .map((t) => t.replace(/\s+/g, " "))
+        .map((t) => t.replace(/[^a-z0-9\s-_]/g, ""))
         .filter(Boolean)
     )
   ).slice(0, 50);
@@ -25,14 +26,34 @@ async function ensureSettingsTable() {
   await prisma.$executeRawUnsafe(SETTINGS_TABLE_SQL);
 }
 
-export async function getDefaultTags(): Promise<string[]> {
+async function getSettingValue(key: string): Promise<unknown | undefined> {
   await ensureSettingsTable();
 
   const rows = await prisma.$queryRawUnsafe<Array<{ value: unknown }>>(
-    `SELECT value FROM app_settings WHERE key = 'default_tags' LIMIT 1`
+    `SELECT value FROM app_settings WHERE key = $1 LIMIT 1`,
+    key
   );
 
-  const rawValue = rows[0]?.value;
+  return rows[0]?.value;
+}
+
+async function setSettingValue(key: string, value: unknown) {
+  await ensureSettingsTable();
+
+  await prisma.$executeRawUnsafe(
+    `
+    INSERT INTO app_settings (key, value, updated_at)
+    VALUES ($1, $2::jsonb, now())
+    ON CONFLICT (key)
+    DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+    `,
+    key,
+    JSON.stringify(value)
+  );
+}
+
+export async function getDefaultTags(): Promise<string[]> {
+  const rawValue = await getSettingValue("default_tags");
 
   if (!Array.isArray(rawValue)) {
     return [];
@@ -42,20 +63,42 @@ export async function getDefaultTags(): Promise<string[]> {
 }
 
 export async function setDefaultTags(tags: string[]): Promise<string[]> {
-  await ensureSettingsTable();
-
   const normalized = normalizeTags(tags);
-  const jsonValue = JSON.stringify(normalized);
-
-  await prisma.$executeRawUnsafe(
-    `
-    INSERT INTO app_settings (key, value, updated_at)
-    VALUES ('default_tags', $1::jsonb, now())
-    ON CONFLICT (key)
-    DO UPDATE SET value = EXCLUDED.value, updated_at = now()
-    `,
-    jsonValue
-  );
+  await setSettingValue("default_tags", normalized);
 
   return normalized;
+}
+
+export async function getDefaultCommentsEnabled(): Promise<boolean> {
+  const rawValue = await getSettingValue("default_comments_enabled");
+  return typeof rawValue === "boolean" ? rawValue : false;
+}
+
+export async function setDefaultCommentsEnabled(enabled: boolean): Promise<boolean> {
+  await setSettingValue("default_comments_enabled", Boolean(enabled));
+  return Boolean(enabled);
+}
+
+export async function getDefaultVisibilityEnabled(): Promise<boolean> {
+  const rawValue = await getSettingValue("default_visibility_enabled");
+  return typeof rawValue === "boolean" ? rawValue : false;
+}
+
+export async function setDefaultVisibilityEnabled(enabled: boolean): Promise<boolean> {
+  await setSettingValue("default_visibility_enabled", Boolean(enabled));
+  return Boolean(enabled);
+}
+
+export async function getUploadDefaults() {
+  const [tags, commentsEnabled, visibilityEnabled] = await Promise.all([
+    getDefaultTags(),
+    getDefaultCommentsEnabled(),
+    getDefaultVisibilityEnabled(),
+  ]);
+
+  return {
+    tags,
+    commentsEnabled,
+    visibilityEnabled,
+  };
 }

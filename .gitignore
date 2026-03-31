@@ -30,4 +30,3 @@ prisma/*.db-journal
 temp.txt
 .agents/
 data/
-Dockerfile.bak

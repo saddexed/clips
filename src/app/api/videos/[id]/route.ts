@@ -4,6 +4,15 @@ import { revalidatePath } from "next/cache";
 import { rename, mkdir, unlink, stat } from "node:fs/promises";
 import path from "node:path";
 
+function normalizeTag(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/[^a-z0-9\s-_]/g, "");
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -11,7 +20,16 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, description, tags, isHidden, date } = body;
+    const { title, description, tags, isHidden, date, commentsEnabled } = body;
+
+    const existingVideo = await prisma.video.findUnique({
+      where: { id },
+      select: { originalMetadata: true },
+    });
+
+    if (!existingVideo) {
+      return NextResponse.json({ error: "Video not found" }, { status: 404 });
+    }
 
     // Build the update query dynamically
     const updateData: any = {};
@@ -19,15 +37,37 @@ export async function PATCH(
     if (description !== undefined) updateData.description = description;
     if (isHidden !== undefined) updateData.isHidden = isHidden;
     if (date !== undefined) updateData.date = new Date(date);
+    if (commentsEnabled !== undefined) {
+      const currentMetadata =
+        existingVideo.originalMetadata &&
+        typeof existingVideo.originalMetadata === "object" &&
+        !Array.isArray(existingVideo.originalMetadata)
+          ? (existingVideo.originalMetadata as Record<string, unknown>)
+          : {};
+
+      updateData.originalMetadata = {
+        ...currentMetadata,
+        commentsEnabled: Boolean(commentsEnabled),
+      };
+    }
 
     // Handle Tags (Many-to-Many relation)
     if (Array.isArray(tags)) {
+      const normalizedTags = Array.from(
+        new Set(
+          tags
+            .filter((t): t is string => typeof t === "string")
+            .map((t) => normalizeTag(t))
+            .filter(Boolean)
+        )
+      );
+
       updateData.tags = {
         // Disconnect all existing tags first, then connect the new ones
         set: [],
-        connectOrCreate: tags.map((t: string) => ({
-          where: { name: t.toLowerCase() },
-          create: { name: t.toLowerCase() },
+        connectOrCreate: normalizedTags.map((t) => ({
+          where: { name: t },
+          create: { name: t },
         })),
       };
     }
@@ -47,7 +87,11 @@ export async function PATCH(
         jobType: isHideAction ? "HIDE" : "EDIT",
         status: "COMPLETED",
         completedAt: new Date(),
-        ...(isHideAction ? { metadata: { isHidden } } : {})
+        ...(isHideAction
+          ? { metadata: { isHidden } }
+          : commentsEnabled !== undefined && Object.keys(updateData).length === 1
+          ? { metadata: { commentsEnabled: Boolean(commentsEnabled) } }
+          : {})
       }
     });
 

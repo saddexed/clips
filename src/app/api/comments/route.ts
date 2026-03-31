@@ -9,6 +9,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
+    const video = await prisma.video.findUnique({
+      where: { id: videoId },
+      select: { originalMetadata: true, status: true },
+    });
+
+    if (!video || video.status !== "COMPLETED") {
+      return NextResponse.json({ error: "Video not available" }, { status: 404 });
+    }
+
+    const commentsEnabled =
+      !video.originalMetadata ||
+      typeof video.originalMetadata !== "object" ||
+      Array.isArray(video.originalMetadata)
+        ? true
+        : (video.originalMetadata as Record<string, unknown>).commentsEnabled !== false;
+
+    if (!commentsEnabled) {
+      return NextResponse.json({ error: "Comments are disabled for this video" }, { status: 403 });
+    }
+
     const comment = await prisma.comment.create({
       data: {
         content: content.trim(),

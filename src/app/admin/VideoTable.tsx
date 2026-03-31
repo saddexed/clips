@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useOptimistic, useTransition, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Pencil, X, Save, AlertCircle, CheckCircle, Clock, Activity, AlertTriangle, Eye, EyeOff, Trash2, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react';
+import { Pencil, X, Save, AlertCircle, CheckCircle, Clock, Activity, AlertTriangle, Eye, EyeOff, Trash2, ArrowUpDown, ChevronUp, ChevronDown, MessageSquare, MessageSquareOff } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import SafeVideoPlayer from '@/components/SafeVideoPlayer';
 import SearchBar, { type SearchItem } from '@/components/SearchBar';
@@ -40,6 +40,7 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
 
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
   const [filteredIds, setFilteredIds] = useState<Set<string> | null>(null);
+  const [tagToAddSignal, setTagToAddSignal] = useState<{ tag: string; seq: number } | null>(null);
   
   const [sortField, setSortField] = useState<keyof Video>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -100,6 +101,17 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
     [localVideos]
   );
 
+  const allAvailableTags = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          localVideos
+            .flatMap((video) => (video.tags || []).map((tag) => tag.name.trim().toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ')).filter(Boolean))
+        )
+      ).sort((a, b) => a.localeCompare(b)),
+    [localVideos]
+  );
+
   const handleSearchResultsChange = useCallback((items: SearchItem[]) => {
     setFilteredIds(new Set(items.map((item) => item.id)));
   }, []);
@@ -136,6 +148,65 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
       // Revert logic would require caching the deleted item, but for now we accept the risk
     }
   };
+
+  const isCommentsEnabled = (video: Video) => {
+    const metadata = video.originalMetadata;
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return true;
+    return (metadata as Record<string, unknown>).commentsEnabled !== false;
+  };
+
+  const handleToggleComments = async (vid: Video) => {
+    const currentValue = isCommentsEnabled(vid);
+    const nextValue = !currentValue;
+
+    setLocalVideos((prev) =>
+      prev.map((v) =>
+        v.id === vid.id
+          ? {
+              ...v,
+              originalMetadata: {
+                ...(v.originalMetadata && typeof v.originalMetadata === 'object' && !Array.isArray(v.originalMetadata)
+                  ? v.originalMetadata
+                  : {}),
+                commentsEnabled: nextValue,
+              },
+            }
+          : v
+      )
+    );
+
+    try {
+      const res = await fetch(`/api/videos/${vid.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commentsEnabled: nextValue }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to update comments setting');
+      }
+
+      router.refresh();
+    } catch (e) {
+      console.error(e);
+      setLocalVideos((prev) =>
+        prev.map((v) =>
+          v.id === vid.id
+            ? {
+                ...v,
+                originalMetadata: {
+                  ...(v.originalMetadata && typeof v.originalMetadata === 'object' && !Array.isArray(v.originalMetadata)
+                    ? v.originalMetadata
+                    : {}),
+                  commentsEnabled: currentValue,
+                },
+              }
+            : v
+        )
+      );
+    }
+  };
+
   return (
     <>
       <div style={{ marginBottom: '1rem' }}>
@@ -143,6 +214,7 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
           items={searchItems}
           onResultsChange={handleSearchResultsChange}
           placeholder="Filter table by title or tags..."
+          tagToAddSignal={tagToAddSignal}
         />
       </div>
 
@@ -190,9 +262,27 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
                     {vid.tags && vid.tags.length > 0 ? (
                       <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
                         {vid.tags.map(t => (
-                          <span key={t.name} style={{ background: 'var(--secondary)', padding: '0.1rem 0.4rem', borderRadius: '0.25rem', fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>
-                            #{t.name}
-                          </span>
+                          (() => {
+                            const displayTag = t.name.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+                            return (
+                          <button
+                            key={t.name}
+                            type="button"
+                            className="search-tag-chip"
+                            style={{ padding: '0.1rem 0.45rem', fontSize: '0.72rem' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTagToAddSignal((prev) => ({
+                                tag: displayTag,
+                                seq: (prev?.seq || 0) + 1,
+                              }));
+                            }}
+                            title={`Filter by tag: ${displayTag}`}
+                          >
+                            #{displayTag}
+                          </button>
+                            );
+                          })()
                         ))}
                       </div>
                     ) : (
@@ -239,6 +329,25 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
                       >
                         <Pencil size={20} />
                       </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleToggleComments(vid); }}
+                        style={{
+                          padding: '0.4rem',
+                          background: isCommentsEnabled(vid) ? 'var(--secondary)' : 'rgba(245, 158, 11, 0.15)',
+                          border: 'none',
+                          borderRadius: '0.375rem',
+                          color: isCommentsEnabled(vid) ? 'var(--foreground)' : '#f59e0b',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          transition: 'background-color 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isCommentsEnabled(vid) ? 'rgba(255,255,255,0.1)' : 'rgba(245, 158, 11, 0.25)'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isCommentsEnabled(vid) ? 'var(--secondary)' : 'rgba(245, 158, 11, 0.15)'}
+                        title={isCommentsEnabled(vid) ? 'Comments enabled (click to disable)' : 'Comments disabled (click to enable)'}
+                      >
+                        {isCommentsEnabled(vid) ? <MessageSquare size={20} /> : <MessageSquareOff size={20} />}
+                      </button>
                       <button 
                         onClick={(e) => { e.stopPropagation(); handleDeleteInline(vid.id); }}
                         style={{ padding: '0.4rem', background: 'rgba(239, 68, 68, 0.1)', border: 'none', borderRadius: '0.375rem', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'background-color 0.2s' }}
@@ -266,6 +375,7 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
       {editingVideo && (
         <EditVideoModal 
           video={editingVideo} 
+          allTags={allAvailableTags}
           onClose={() => setEditingVideo(null)} 
           onSave={handleEditComplete}
           onDelete={(id) => {
@@ -278,10 +388,17 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
   );
 }
 
-function EditVideoModal({ video, onClose, onSave, onDelete }: { video: Video, onClose: () => void, onSave: (v: Video) => void, onDelete: (id: string) => void }) {
+function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: Video, allTags: string[], onClose: () => void, onSave: (v: Video) => void, onDelete: (id: string) => void }) {
+  const normalizeTag = (input: string) => input.trim().toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').replace(/[^a-z0-9\s-_]/g, '');
+
   const [title, setTitle] = useState(video.title);
   const [description, setDescription] = useState(video.description);
-  const [tagsInput, setTagsInput] = useState(video.tags?.map(t => t.name).join(', ') || '');
+  const [selectedTags, setSelectedTags] = useState<string[]>(
+    (video.tags || [])
+      .map((t) => normalizeTag(t.name))
+      .filter(Boolean)
+  );
+  const [tagQuery, setTagQuery] = useState('');
   
   const [activeTab, setActiveTab] = useState<'edit' | 'metadata'>('edit');
   
@@ -318,6 +435,23 @@ function EditVideoModal({ video, onClose, onSave, onDelete }: { video: Video, on
   const [error, setError] = useState('');
   const [mounted, setMounted] = useState(false);
 
+  const suggestedTags = useMemo(() => {
+    const q = normalizeTag(tagQuery);
+    if (!q) return [];
+    return allTags.filter((tag) => tag.includes(q) && !selectedTags.includes(tag)).slice(0, 6);
+  }, [allTags, selectedTags, tagQuery]);
+
+  const addTag = (raw: string) => {
+    const tag = normalizeTag(raw);
+    if (!tag) return;
+    setSelectedTags((prev) => (prev.includes(tag) ? prev : [...prev, tag]));
+    setTagQuery('');
+  };
+
+  const removeTag = (tag: string) => {
+    setSelectedTags((prev) => prev.filter((t) => t !== tag));
+  };
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -327,10 +461,7 @@ function EditVideoModal({ video, onClose, onSave, onDelete }: { video: Video, on
     setError('');
 
     try {
-      // Parse tags separated by commas
-      const tagsArray = tagsInput.split(',')
-        .map(t => t.trim())
-        .filter(t => t.length > 0);
+      const tagsArray = selectedTags;
 
       const payloadDate = 
         dateMode === 'original' ? video.createdAt 
@@ -516,14 +647,63 @@ function EditVideoModal({ video, onClose, onSave, onDelete }: { video: Video, on
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>Tags (comma separated)</label>
-                <input 
-                  type="text" 
-                  value={tagsInput}
-                  onChange={(e) => setTagsInput(e.target.value)}
-                  placeholder="e.g. funny, headshot, win"
-                  style={{ width: '100%', padding: '0.75rem', background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--foreground)' }}
-                />
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>Tags</label>
+                <div className="search-inline-shell">
+                  {selectedTags.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      className="search-tag-chip search-tag-chip--selected"
+                      onClick={() => removeTag(tag)}
+                      title="Remove tag"
+                    >
+                      <X size={12} />
+                      {tag}
+                    </button>
+                  ))}
+
+                  <input
+                    type="text"
+                    value={tagQuery}
+                    onChange={(e) => setTagQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Tab' && suggestedTags.length > 0) {
+                        e.preventDefault();
+                        addTag(suggestedTags[0]);
+                        return;
+                      }
+
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const exact = allTags.find((t) => t === normalizeTag(tagQuery));
+                        addTag(exact || tagQuery);
+                        return;
+                      }
+
+                      if ((e.key === 'Backspace' || e.key === 'Delete') && !tagQuery.trim() && selectedTags.length > 0) {
+                        e.preventDefault();
+                        setSelectedTags((prev) => prev.slice(0, -1));
+                      }
+                    }}
+                    placeholder="Type tag and press Enter/Tab"
+                    className="search-inline-input"
+                  />
+
+                  {suggestedTags.length > 0 ? (
+                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginLeft: 'auto' }}>
+                      {suggestedTags.slice(0, 3).map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          className="search-tag-chip"
+                          onClick={() => addTag(tag)}
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               </div>
 
               <div>

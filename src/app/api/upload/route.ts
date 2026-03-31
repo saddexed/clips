@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
-import { getDefaultTags } from "@/lib/settings";
+import { getUploadDefaults } from "@/lib/settings";
 import { videoQueue } from "@/lib/queue";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     
     const lastModifiedStr = formData.get("lastModified")?.toString();
     const clientDate = lastModifiedStr ? new Date(parseInt(lastModifiedStr, 10)) : undefined;
-    const defaultTags = await getDefaultTags();
+  const defaults = await getUploadDefaults();
 
     // 1. Create the Database Record (UPLOADING -> QUEUED)
     const video = await prisma.video.create({
@@ -77,12 +77,17 @@ export async function POST(request: NextRequest) {
         description: formData.get("description")?.toString() || "",
         status: "QUEUED",
         mediaType: isImage ? "IMAGE" : "VIDEO",
+        isHidden: !defaults.visibilityEnabled,
         originalSize: file.size,
-        originalMetadata: { originalFilename: file.name, contentType: file.type }, // Store original name in metadata
-        ...(defaultTags.length > 0
+        originalMetadata: {
+          originalFilename: file.name,
+          contentType: file.type,
+          commentsEnabled: defaults.commentsEnabled,
+        }, // Store original name in metadata and behavior flags
+        ...(defaults.tags.length > 0
           ? {
               tags: {
-                connectOrCreate: defaultTags.map((tag) => ({
+                connectOrCreate: defaults.tags.map((tag) => ({
                   where: { name: tag },
                   create: { name: tag },
                 })),

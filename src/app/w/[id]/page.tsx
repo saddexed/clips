@@ -69,6 +69,13 @@ export default async function WatchPage({
     notFound();
   }
 
+  const commentsEnabled =
+    !video.originalMetadata ||
+    typeof video.originalMetadata !== 'object' ||
+    Array.isArray(video.originalMetadata)
+      ? true
+      : (video.originalMetadata as Record<string, unknown>).commentsEnabled !== false;
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <header style={{ position: 'sticky', top: 0, zIndex: 10, width: '100%', background: 'var(--glass)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderBottom: '1px solid var(--glass-border)' }}>
@@ -137,7 +144,7 @@ export default async function WatchPage({
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '2rem' }}>
               {video.tags.map(tag => (
                 <span key={tag.id} style={{ background: 'var(--secondary)', color: 'var(--secondary-foreground)', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.875rem', fontWeight: 500 }}>
-                  #{tag.name}
+                  #{tag.name.replace(/_/g, ' ').replace(/\s+/g, ' ').trim()}
                 </span>
               ))}
             </div>
@@ -145,7 +152,13 @@ export default async function WatchPage({
         </div>
 
         {/* Comment Section */}
-        <CommentSection videoId={video.id} initialComments={video.comments} />
+        {commentsEnabled ? (
+          <CommentSection videoId={video.id} initialComments={video.comments} />
+        ) : (
+          <div className="glass-panel" style={{ borderRadius: 'var(--radius)', padding: '1.25rem', color: 'var(--muted-foreground)' }}>
+            Comments are turned off for this video.
+          </div>
+        )}
       </main>
     </div>
   );

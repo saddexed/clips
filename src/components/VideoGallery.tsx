@@ -107,6 +107,9 @@ export default function VideoGallery({ initialVideos }: { initialVideos: Gallery
 
                     <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
                       {(video.tags || []).slice(0, 3).map((tag) => (
+                        (() => {
+                          const displayTag = tag.name.replace(/_/g, " ").replace(/\s+/g, " ").trim();
+                          return (
                         <button
                           key={`${video.id}-${tag.name}`}
                           type="button"
@@ -116,14 +119,16 @@ export default function VideoGallery({ initialVideos }: { initialVideos: Gallery
                             e.preventDefault();
                             e.stopPropagation();
                             setTagToAddSignal((prev) => ({
-                              tag: tag.name,
+                              tag: displayTag,
                               seq: (prev?.seq || 0) + 1,
                             }));
                           }}
-                          title={`Filter by tag: ${tag.name}`}
+                          title={`Filter by tag: ${displayTag}`}
                         >
-                          #{tag.name}
+                          #{displayTag}
                         </button>
+                          );
+                        })()
                       ))}
                     </div>
                   </div>

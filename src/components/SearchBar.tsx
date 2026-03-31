@@ -23,6 +23,16 @@ export default function SearchBar({
   placeholder = "Search by title or tags...",
   tagToAddSignal = null,
 }: SearchBarProps) {
+  const normalizeTagText = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/_/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const sanitizeTagInput = (value: string) =>
+    normalizeTagText(value).replace(/[^a-z0-9\s-]/g, "");
+
   const [query, setQuery] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [maxInlineSuggestions, setMaxInlineSuggestions] = useState(3);
@@ -37,7 +47,7 @@ export default function SearchBar({
     [items]
   );
 
-  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedQuery = normalizeTagText(query);
 
   const suggestedTags = useMemo(() => {
     if (!normalizedQuery) return [];
@@ -45,7 +55,7 @@ export default function SearchBar({
     const uniqueTags = new Set<string>();
     for (const item of normalizedItems) {
       for (const tag of item.tags) {
-        const lowered = tag.name.toLowerCase();
+        const lowered = normalizeTagText(tag.name);
         if (lowered.includes(normalizedQuery) && !selectedTags.includes(lowered)) {
           uniqueTags.add(lowered);
         }
@@ -58,7 +68,7 @@ export default function SearchBar({
   const filteredItems = useMemo(() => {
     return normalizedItems.filter((item) => {
       const lowerTitle = (item.title || item.filename || "").toLowerCase();
-      const lowerTags = item.tags.map((t) => t.name.toLowerCase());
+  const lowerTags = item.tags.map((t) => normalizeTagText(t.name));
 
       const matchesQuery =
         !normalizedQuery ||
@@ -78,7 +88,7 @@ export default function SearchBar({
   const hasActiveFilters = selectedTags.length > 0 || normalizedQuery.length > 0;
 
   const addTag = (tag: string) => {
-    const normalizedTag = tag.trim().toLowerCase();
+    const normalizedTag = sanitizeTagInput(tag);
     if (!normalizedTag) return;
     setSelectedTags((prev) => (prev.includes(normalizedTag) ? prev : [...prev, normalizedTag]));
     setQuery("");
