@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { extractThumbnail } from "@/lib/ffmpeg";
 import fs from "node:fs";
 import { stat, mkdir } from "node:fs/promises";
-import { exec } from "node:child_process";
-import util from "node:util";
 import path from "node:path";
 import { Readable } from "node:stream";
-
-const execAsync = util.promisify(exec);
 
 export async function GET(
   req: NextRequest,
@@ -25,7 +22,7 @@ export async function GET(
     }
 
     const dataPath = process.env.DATA_PATH || "/app/data";
-    const thumbPath = path.join(dataPath, ".thumbnails", `${id}.png`);
+  const thumbPath = path.join(dataPath, ".thumbnails", `${id}.webp`);
 
     try {
       await stat(thumbPath);
@@ -45,7 +42,7 @@ export async function GET(
         const thumbDir = path.dirname(thumbPath);
         await mkdir(thumbDir, { recursive: true });
         
-        await execAsync(`ffmpeg -i "${sourcePath}" -ss 00:00:01.000 -vframes 1 "${thumbPath}"`);
+        await extractThumbnail(sourcePath, thumbPath);
       } catch (err) {
         console.error("Failed to generate thumbnail via ffmpeg", err);
         return new NextResponse(null, { status: 404 });
@@ -59,7 +56,7 @@ export async function GET(
 
       return new NextResponse(webStream as any, {
         headers: {
-          "Content-Type": "image/png",
+          "Content-Type": "image/webp",
           "Content-Length": size.toString(),
           "Cache-Control": "public, max-age=86400",
         },

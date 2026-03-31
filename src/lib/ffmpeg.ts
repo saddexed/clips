@@ -178,6 +178,10 @@ export async function extractThumbnail(inputPath: string, outputPath: string): P
       "-i", inputPath,
       "-ss", "00:00:00.000",
       "-vframes", "1",
+      "-c:v", "libwebp",
+      "-q:v", "90",
+      "-compression_level", "6",
+      "-loglevel", "error",
       outputPath
     ];
 
