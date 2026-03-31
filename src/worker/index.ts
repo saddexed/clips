@@ -3,7 +3,8 @@ import Redis from "ioredis";
 import { rename, stat, mkdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "../lib/prisma.js";
-import { extractMetadata, transcodeToWebM } from "../lib/ffmpeg.js";
+import { extractMetadata, killActiveFfmpegProcess, transcodeToWebM } from "../lib/ffmpeg.js";
+import { isQueuePaused } from "../lib/queue.js";
 import sharp from "sharp";
 
 const connection = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
@@ -24,9 +25,19 @@ function getOldestDate(dates: (Date | number | string | undefined | null)[]): Da
   return oldest;
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitUntilQueueResumed() {
+  while (await isQueuePaused()) {
+    await sleep(1000);
+  }
+}
+
 async function processVideo(job: Job) {
   const { videoId } = job.data;
   console.log(`[Worker] Started processing video ${videoId}`);
+
+  await waitUntilQueueResumed();
 
   await prisma.video.update({
     where: { id: videoId },
@@ -177,9 +188,49 @@ async function processVideo(job: Job) {
       const outputFilename = `${baseName}.webm`;
       const outputPath = path.join(processedDir, outputFilename);
 
-      await transcodeToWebM(filePath, outputPath, metadata.duration, async (percent) => {
-        await job.updateProgress(percent);
-      });
+      let transcoded = false;
+
+      while (!transcoded) {
+        await waitUntilQueueResumed();
+
+        let pauseCheckTimer: NodeJS.Timeout | null = null;
+        let pauseTriggered = false;
+
+        try {
+          pauseCheckTimer = setInterval(() => {
+            void isQueuePaused().then((paused) => {
+              if (paused) {
+                pauseTriggered = true;
+                const killed = killActiveFfmpegProcess();
+                if (killed) {
+                  console.log(`[Worker] Queue paused - interrupted ffmpeg for ${videoId}`);
+                }
+              }
+            }).catch(() => {
+              // Ignore transient pause-check failures and continue processing
+            });
+          }, 750);
+
+          await transcodeToWebM(filePath, outputPath, metadata.duration, async (percent) => {
+            await job.updateProgress(percent);
+          });
+
+          transcoded = true;
+        } catch (error) {
+          const currentlyPaused = await isQueuePaused();
+          if (pauseTriggered || currentlyPaused) {
+            await job.updateProgress(0);
+            console.log(`[Worker] Queue is paused; restarting transcode from beginning once resumed for ${videoId}`);
+            await waitUntilQueueResumed();
+            continue;
+          }
+          throw error;
+        } finally {
+          if (pauseCheckTimer) {
+            clearInterval(pauseCheckTimer);
+          }
+        }
+      }
 
       // 4. Move to Vault
       console.log(`[Worker] Moving files to vault for ${videoId}`);

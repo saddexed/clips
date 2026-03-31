@@ -9,6 +9,16 @@ export type VideoMetadata = {
   raw: any;
 };
 
+let activeFfmpegProcess: ReturnType<typeof spawn> | null = null;
+
+export function killActiveFfmpegProcess(): boolean {
+  if (!activeFfmpegProcess || activeFfmpegProcess.killed) {
+    return false;
+  }
+
+  return activeFfmpegProcess.kill("SIGKILL");
+}
+
 /**
  * Extracts metadata from a video file using ffprobe.
  */
@@ -114,6 +124,7 @@ export async function transcodeToWebM(
     ];
 
     const ffmpeg = spawn("ffmpeg", args);
+    activeFfmpegProcess = ffmpeg;
     let stderr = "";
 
     // ffmpeg logs progress to stderr
@@ -135,12 +146,23 @@ export async function transcodeToWebM(
     });
 
     ffmpeg.on("close", (code) => {
+      if (activeFfmpegProcess === ffmpeg) {
+        activeFfmpegProcess = null;
+      }
+
       if (code === 0) {
         onProgress(100);
         resolve();
       } else {
         reject(new Error(`ffmpeg exited with code ${code}. Stderr: ${stderr}`));
       }
+    });
+
+    ffmpeg.on("error", (err) => {
+      if (activeFfmpegProcess === ffmpeg) {
+        activeFfmpegProcess = null;
+      }
+      reject(err);
     });
   });
 }

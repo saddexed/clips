@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Activity, Clock, AlertTriangle, CheckCircle, Trash2, Loader2 } from 'lucide-react';
+import { Activity, Clock, AlertTriangle, CheckCircle, Trash2, Loader2, PauseCircle, PlayCircle } from 'lucide-react';
 
 type QueueData = {
   counts: {
@@ -20,6 +20,7 @@ type QueueData = {
     timestamp: number;
     videoId?: string;
   }>;
+  isPaused: boolean;
 };
 
 export default function TasksPage() {
@@ -47,6 +48,7 @@ export default function TasksPage() {
   }, []);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isQueueActionLoading, setIsQueueActionLoading] = useState(false);
 
   const handleDeleteJob = async (jobId: string) => {
     if (!confirm('Are you sure you want to cancel and delete this job? If the video was not completed it will be erased.')) return;
@@ -71,6 +73,34 @@ export default function TasksPage() {
     }
   };
 
+  const handleQueuePauseToggle = async () => {
+    if (!data) return;
+
+    setIsQueueActionLoading(true);
+    try {
+      const action = data.isPaused ? 'resume' : 'pause';
+      const res = await fetch('/api/queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        alert(`Failed to ${action} queue: ${err.error || 'Unknown error'}`);
+        return;
+      }
+
+      const payload = await res.json();
+      setData((prev) => (prev ? { ...prev, isPaused: payload.isPaused } : prev));
+    } catch (error) {
+      console.error(error);
+      alert('Network error while updating queue state');
+    } finally {
+      setIsQueueActionLoading(false);
+    }
+  };
+
   return (
     <div>
       <div style={{ marginBottom: '2rem' }}>
@@ -78,6 +108,27 @@ export default function TasksPage() {
           Task Queue Monitoring
         </h1>
         <p style={{ color: 'var(--muted-foreground)' }}>View real-time statistics of background video processing workers.</p>
+        <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <button
+            onClick={handleQueuePauseToggle}
+            disabled={isQueueActionLoading || !data}
+            className={data?.isPaused ? 'btn-primary' : 'btn-secondary'}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+          >
+            {isQueueActionLoading ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : data?.isPaused ? (
+              <PlayCircle size={16} />
+            ) : (
+              <PauseCircle size={16} />
+            )}
+            {data?.isPaused ? 'Resume Queue' : 'Pause Queue'}
+          </button>
+
+          <span className={`badge ${data?.isPaused ? 'warning' : 'success'}`}>
+            Queue {data?.isPaused ? 'Paused' : 'Running'}
+          </span>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>

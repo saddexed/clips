@@ -114,6 +114,11 @@ body {
   background: var(--accent);
 }
 
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .btn-nav {
   display: flex;
   align-items: center;
