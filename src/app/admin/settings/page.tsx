@@ -2,16 +2,18 @@ import {
   getDefaultCommentsEnabled,
   getDefaultTags,
   getDefaultVisibilityEnabled,
+  getGlobalCommentsEnabled,
 } from "@/lib/settings";
 import SettingsClient from "./SettingsClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const [defaultTags, defaultCommentsEnabled, defaultVisibilityEnabled] = await Promise.all([
+  const [defaultTags, defaultCommentsEnabled, defaultVisibilityEnabled, globalCommentsEnabled] = await Promise.all([
     getDefaultTags(),
     getDefaultCommentsEnabled(),
     getDefaultVisibilityEnabled(),
+    getGlobalCommentsEnabled(),
   ]);
 
   return (
@@ -29,6 +31,7 @@ export default async function SettingsPage() {
         initialDefaultTags={defaultTags}
         initialCommentsEnabled={defaultCommentsEnabled}
         initialVisibilityEnabled={defaultVisibilityEnabled}
+        initialGlobalCommentsEnabled={globalCommentsEnabled}
       />
     </div>
   );

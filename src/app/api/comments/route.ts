@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
+import { getGlobalCommentsEnabled } from "@/lib/settings";
 
 export async function POST(req: NextRequest) {
   try {
     const { videoId, content } = await req.json();
+
+    const globalCommentsEnabled = await getGlobalCommentsEnabled();
+    if (!globalCommentsEnabled) {
+      return NextResponse.json({ error: "Comments are disabled globally" }, { status: 403 });
+    }
 
     if (!videoId || !content || content.trim() === "") {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });

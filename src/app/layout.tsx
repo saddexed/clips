@@ -5,6 +5,11 @@ import { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Clips',
   description: 'A random assortment of video clips',
+  icons: {
+    icon: '/favicon.ico',
+    shortcut: '/favicon.ico',
+    apple: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({

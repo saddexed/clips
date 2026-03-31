@@ -7,6 +7,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import CommentSection from '@/components/CommentSection';
 import ActionBar from './ActionBar';
 import SafeVideoPlayer from '@/components/SafeVideoPlayer';
+import { getGlobalCommentsEnabled } from '@/lib/settings';
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
@@ -55,26 +56,31 @@ export default async function WatchPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params;
-  const video = await prisma.video.findUnique({
-    where: { id },
-    include: {
-      tags: true,
-      comments: {
-        orderBy: { createdAt: 'desc' }
+  const [video, globalCommentsEnabled] = await Promise.all([
+    prisma.video.findUnique({
+      where: { id },
+      include: {
+        tags: true,
+        comments: {
+          orderBy: { createdAt: 'desc' }
+        }
       }
-    }
-  });
+    }),
+    getGlobalCommentsEnabled(),
+  ]);
 
   if (!video || video.status !== 'COMPLETED') {
     notFound();
   }
 
-  const commentsEnabled =
+  const perVideoCommentsEnabled =
     !video.originalMetadata ||
     typeof video.originalMetadata !== 'object' ||
     Array.isArray(video.originalMetadata)
       ? true
       : (video.originalMetadata as Record<string, unknown>).commentsEnabled !== false;
+
+  const commentsEnabled = globalCommentsEnabled && perVideoCommentsEnabled;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -156,7 +162,7 @@ export default async function WatchPage({
           <CommentSection videoId={video.id} initialComments={video.comments} />
         ) : (
           <div className="glass-panel" style={{ borderRadius: 'var(--radius)', padding: '1.25rem', color: 'var(--muted-foreground)' }}>
-            Comments are turned off for this video.
+            {globalCommentsEnabled ? 'Comments are turned off for this video.' : 'Comments are currently disabled globally.'}
           </div>
         )}
       </main>

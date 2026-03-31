@@ -79,6 +79,16 @@ export async function setDefaultCommentsEnabled(enabled: boolean): Promise<boole
   return Boolean(enabled);
 }
 
+export async function getGlobalCommentsEnabled(): Promise<boolean> {
+  const rawValue = await getSettingValue("global_comments_enabled");
+  return typeof rawValue === "boolean" ? rawValue : true;
+}
+
+export async function setGlobalCommentsEnabled(enabled: boolean): Promise<boolean> {
+  await setSettingValue("global_comments_enabled", Boolean(enabled));
+  return Boolean(enabled);
+}
+
 export async function getDefaultVisibilityEnabled(): Promise<boolean> {
   const rawValue = await getSettingValue("default_visibility_enabled");
   return typeof rawValue === "boolean" ? rawValue : false;

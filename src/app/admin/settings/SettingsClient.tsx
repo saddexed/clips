@@ -1,16 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, EyeOff, MessageSquare, MessageSquareOff } from "lucide-react";
+import { Eye, EyeOff, MessageSquare, MessageSquareOff, MessagesSquare } from "lucide-react";
 
 export default function SettingsClient({
   initialDefaultTags,
   initialCommentsEnabled,
   initialVisibilityEnabled,
+  initialGlobalCommentsEnabled,
 }: {
   initialDefaultTags: string[];
   initialCommentsEnabled: boolean;
   initialVisibilityEnabled: boolean;
+  initialGlobalCommentsEnabled: boolean;
 }) {
   const normalizeTag = (input: string) => input.trim().toLowerCase().replace(/_/g, " ").replace(/\s+/g, " ").replace(/[^a-z0-9\s-_]/g, "");
 
@@ -20,6 +22,7 @@ export default function SettingsClient({
   const [tagQuery, setTagQuery] = useState("");
   const [commentsEnabled, setCommentsEnabled] = useState(initialCommentsEnabled);
   const [visibilityEnabled, setVisibilityEnabled] = useState(initialVisibilityEnabled);
+  const [globalCommentsEnabled, setGlobalCommentsEnabled] = useState(initialGlobalCommentsEnabled);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +66,7 @@ export default function SettingsClient({
           tags: selectedTags,
           commentsEnabled,
           visibilityEnabled,
+          globalCommentsEnabled,
         }),
       });
 
@@ -78,6 +82,7 @@ export default function SettingsClient({
       setSelectedTags(normalizedTags);
       setCommentsEnabled(Boolean(payload.commentsEnabled));
       setVisibilityEnabled(Boolean(payload.visibilityEnabled));
+  setGlobalCommentsEnabled(Boolean(payload.globalCommentsEnabled));
       setMessage("Default upload settings updated.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
@@ -130,6 +135,22 @@ export default function SettingsClient({
 
       <div style={{ marginTop: "0.9rem", marginBottom: "0.9rem", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem" }}>
         <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button
+            type="button"
+            onClick={() => setGlobalCommentsEnabled((prev) => !prev)}
+            title={globalCommentsEnabled ? "Comments globally enabled" : "Comments globally disabled"}
+            aria-label={globalCommentsEnabled ? "Comments globally enabled" : "Comments globally disabled"}
+            style={iconButtonStyle}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.1)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "var(--secondary)";
+            }}
+          >
+            {globalCommentsEnabled ? <MessagesSquare size={16} /> : <MessageSquareOff size={16} />}
+          </button>
+
           <button
             type="button"
             onClick={() => setCommentsEnabled((prev) => !prev)}
