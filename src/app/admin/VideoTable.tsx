@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useOptimistic, useTransition, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Pencil, X, Save, AlertCircle, CheckCircle, Clock, Activity, AlertTriangle, Eye, EyeOff, Trash2 } from 'lucide-react';
+import { Pencil, X, Save, AlertCircle, CheckCircle, Clock, Activity, AlertTriangle, Eye, EyeOff, Trash2, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import SafeVideoPlayer from '@/components/SafeVideoPlayer';
 
@@ -38,6 +38,49 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
   }, [initialVideos]);
 
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
+  
+  const [sortField, setSortField] = useState<keyof Video>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  const handleSort = (field: keyof Video) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder(field === 'createdAt' || field === 'uploadedAt' ? 'desc' : 'asc');
+    }
+  };
+
+  const sortedVideos = useMemo(() => {
+    const list = [...localVideos];
+    list.sort((a, b) => {
+      let valA: any, valB: any;
+      if (sortField === 'title') {
+         valA = (a.title || a.filename).toLowerCase();
+         valB = (b.title || b.filename).toLowerCase();
+      } else if (sortField === 'duration') {
+         valA = a.duration || 0;
+         valB = b.duration || 0;
+      } else if (sortField === 'originalSize') {
+         valA = Number(a.processedSize || a.originalSize);
+         valB = Number(b.processedSize || b.originalSize);
+      } else if (sortField === 'createdAt') {
+         valA = new Date(a.createdAt).getTime();
+         valB = new Date(b.createdAt).getTime();
+      } else if (sortField === 'uploadedAt') {
+         valA = new Date(a.uploadedAt).getTime();
+         valB = new Date(b.uploadedAt).getTime();
+      } else if (sortField === 'date') {
+         valA = new Date(a.date || a.createdAt).getTime();
+         valB = new Date(b.date || b.createdAt).getTime();
+      }
+      
+      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return list;
+  }, [localVideos, sortField, sortOrder]);
 
   const handleEditComplete = (updatedVideo: Video) => {
     setLocalVideos(localVideos.map(v => v.id === updatedVideo.id ? updatedVideo : v));
@@ -71,13 +114,10 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
       // Revert logic would require caching the deleted item, but for now we accept the risk
     }
   };
-
-  const videos = localVideos;
-
   return (
     <>
       <div className="glass-panel" style={{ borderRadius: 'var(--radius)', overflow: 'hidden' }}>
-        {videos.length === 0 ? (
+        {sortedVideos.length === 0 ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted-foreground)' }}>
             <p>No videos found in the library.</p>
           </div>
@@ -85,17 +125,18 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
           <table className="data-table">
             <thead>
               <tr>
-                <th>Title / File</th>
+                <SortableHeader label="Title / File" field="title" currentField={sortField} currentOrder={sortOrder} onSort={handleSort} />
                 <th>Tags</th>
-                <th>Duration / Res</th>
-                <th>Size</th>
-                <th>Uploaded At</th>
+                <SortableHeader label="Duration / Res" field="duration" currentField={sortField} currentOrder={sortOrder} onSort={handleSort} />
+                <SortableHeader label="Size" field="originalSize" currentField={sortField} currentOrder={sortOrder} onSort={handleSort} />
+                <SortableHeader label="Original Date" field="date" currentField={sortField} currentOrder={sortOrder} onSort={handleSort} />
                 <th style={{ textAlign: 'center' }}>Status</th>
                 <th style={{ textAlign: 'center' }}>Actions</th>
+                <SortableHeader label="Uploaded At" field="uploadedAt" currentField={sortField} currentOrder={sortOrder} onSort={handleSort} />
               </tr>
             </thead>
             <tbody>
-              {videos.map((vid) => (
+              {sortedVideos.map((vid) => (
                 <tr 
                   key={vid.id} 
                   style={{ 
@@ -140,7 +181,7 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
                     {getCompressionInfo(vid.originalSize, vid.processedSize).columnStr}
                   </td>
                   <td style={{ color: 'var(--muted-foreground)' }}>
-                    {new Date(vid.uploadedAt).toLocaleString(undefined, { 
+                    {new Date(vid.date || vid.createdAt).toLocaleString(undefined, { 
                       year: 'numeric', month: 'numeric', day: 'numeric', 
                       hour: '2-digit', minute: '2-digit'
                     })}
@@ -178,6 +219,12 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
                         <Trash2 size={20} />
                       </button>
                     </div>
+                  </td>
+                  <td style={{ color: 'var(--muted-foreground)' }}>
+                    {new Date(vid.uploadedAt).toLocaleString(undefined, { 
+                      year: 'numeric', month: 'numeric', day: 'numeric', 
+                      hour: '2-digit', minute: '2-digit'
+                    })}
                   </td>
                 </tr>
               ))}
@@ -613,4 +660,24 @@ function getCompressionInfo(originalSize: number | bigint, processedSize: number
   const columnStr = `${formatBytes(proc)}(${ratio}%)`;
   
   return { columnStr, editStr };
+}
+
+function SortableHeader({ label, field, currentField, currentOrder, onSort }: { label: string, field: string, currentField: string, currentOrder: 'asc' | 'desc', onSort: (field: any) => void }) {
+  return (
+    <th 
+      style={{ cursor: 'pointer', userSelect: 'none', transition: 'color 0.2s' }}
+      onClick={() => onSort(field)}
+      onMouseEnter={(e) => e.currentTarget.style.color = 'var(--foreground)'}
+      onMouseLeave={(e) => e.currentTarget.style.color = currentField === field ? 'var(--foreground)' : 'var(--muted-foreground)'}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: currentField === field ? 'var(--foreground)' : 'currentColor' }}>
+        {label}
+        {currentField === field ? (
+          currentOrder === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
+        ) : (
+          <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
+        )}
+      </div>
+    </th>
+  );
 }
