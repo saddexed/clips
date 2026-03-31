@@ -27,6 +27,9 @@ interface GlobalUploadContextType {
 const GlobalUploadContext = createContext<GlobalUploadContextType | undefined>(undefined);
 
 export function GlobalUploadProvider({ children }: { children: ReactNode }) {
+  const MAX_CONCURRENT_UPLOADS = 3;
+  const UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
+
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isOverlayOpen, setOverlayOpen] = useState(false);
@@ -116,55 +119,78 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
     };
   }, [addFiles]);
 
-  // 3. The actual upload logic (simultaneous runner)
-  useEffect(() => {
-    // Find all pending uploads and start them
-    uploads.filter(u => u.status === 'pending').forEach(upload => {
-      // Mark as uploading immediately to prevent double-firing
-      setUploads(prev => prev.map(p => p.id === upload.id ? { ...p, status: 'uploading', progress: 10 } : p));
+  const doUpload = useCallback(async (upload: UploadItem) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort('Upload timeout'), UPLOAD_TIMEOUT_MS);
 
-      const doUpload = async () => {
+    try {
+      const formData = new FormData();
+      formData.append('file', upload.file);
+      formData.append('lastModified', upload.file.lastModified.toString());
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        let message = 'Upload failed';
         try {
-          const formData = new FormData();
-          formData.append('file', upload.file);
-          formData.append('lastModified', upload.file.lastModified.toString());
-          
-          const res = await fetch('/api/upload', {
-            method: 'POST',
-            body: formData,
-          });
-
-          if (!res.ok) {
-            const data = await res.json();
-            throw new Error(data.error || 'Upload failed');
-          }
-
           const data = await res.json();
-
-          setUploads(prev => prev.map(p => 
-            p.id === upload.id ? { ...p, status: 'success', progress: 100, videoId: data.videoId } : p
-          ));
-        } catch (err: any) {
-          setUploads(prev => prev.map(p => 
-            p.id === upload.id ? { ...p, status: 'error', progress: 0, error: err.message || 'Error occurred' } : p
-          ));
+          message = data?.error || message;
+        } catch {
+          // no-op, keep fallback message
         }
-      };
+        throw new Error(message);
+      }
 
-      doUpload();
-    });
-  }, [uploads]);
+      const data = await res.json();
+
+      setUploads(prev => prev.map(p =>
+        p.id === upload.id ? { ...p, status: 'success', progress: 100, videoId: data.videoId } : p
+      ));
+    } catch (err: any) {
+      const isAbort = err?.name === 'AbortError' || err?.message === 'Upload timeout';
+      setUploads(prev => prev.map(p =>
+        p.id === upload.id
+          ? { ...p, status: 'error', progress: 0, error: isAbort ? 'Upload timed out. Please retry.' : (err?.message || 'Error occurred') }
+          : p
+      ));
+    } finally {
+      clearTimeout(timeout);
+    }
+  }, []);
+
+  // 3. Controlled queue runner (prevents stalled pending files)
+  useEffect(() => {
+    const activeCount = uploads.filter(u => u.status === 'uploading').length;
+    if (activeCount >= MAX_CONCURRENT_UPLOADS) return;
+
+    const availableSlots = MAX_CONCURRENT_UPLOADS - activeCount;
+    const nextPending = uploads.filter(u => u.status === 'pending').slice(0, availableSlots);
+    if (nextPending.length === 0) return;
+
+    for (const upload of nextPending) {
+      // Mark as uploading immediately so this item won't be picked again
+      setUploads(prev => prev.map(p => p.id === upload.id ? { ...p, status: 'uploading', progress: 10 } : p));
+      void doUpload(upload);
+    }
+  }, [uploads, doUpload]);
 
   const removeUpload = (id: string) => {
     setUploads(prev => prev.filter(p => p.id !== id));
   };
 
   const clearCompleted = () => {
-    setUploads(prev => prev.filter(p => p.status === 'uploading' || p.status === 'pending'));
-    if (uploads.filter(p => p.status === 'uploading' || p.status === 'pending').length === 0) {
-      setOverlayOpen(false);
-      router.refresh();
-    }
+    setUploads(prev => {
+      const remaining = prev.filter(p => p.status === 'uploading' || p.status === 'pending');
+      if (remaining.length === 0) {
+        setOverlayOpen(false);
+        router.refresh();
+      }
+      return remaining;
+    });
   };
 
   // 4. Compute overall progress for the minimized tracker

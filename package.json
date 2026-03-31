@@ -14,11 +14,12 @@
     "db:studio": "prisma studio",
     "db:build": "prisma generate && prisma migrate dev",
     "db:reset": "prisma migrate reset --force",
-    "db:prod:migrate": "prisma migrate deploy",
     "db:prod:push": "prisma db push --accept-data-loss",
     "worker:start": "tsx src/worker/index.ts",
     "docker:up": "docker compose up -d --build",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "prod:fresh": "docker compose down -v && docker compose up -d --build && docker compose exec -T app npm run db:prod:push && docker compose restart app worker",
+    "prod:update": "docker compose up -d --build && docker compose exec -T app npm run db:prod:push && docker compose restart app worker"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.4.2",
