@@ -213,7 +213,7 @@ async function processVideo(job: Job) {
 
           await transcodeToWebM(filePath, outputPath, metadata.duration, async (percent) => {
             await job.updateProgress(percent);
-          });
+          }, metadata.audioBitrate);
 
           transcoded = true;
         } catch (error) {
@@ -238,20 +238,30 @@ async function processVideo(job: Job) {
       await mkdir(vaultDir, { recursive: true });
       
       const finalWebmPath = path.join(vaultDir, outputFilename);
-      
-      // Delete the original raw file from .uploads, keep only WebM
-      await unlink(filePath);
-      await rename(outputPath, finalWebmPath);
+
+      const transcodedStats = await stat(outputPath);
+      let finalPath = finalWebmPath;
+      let finalSize = transcodedStats.size;
+
+      if (transcodedStats.size > originalStats.size) {
+        finalPath = path.join(vaultDir, filename);
+        finalSize = originalStats.size;
+
+        await unlink(outputPath).catch(() => {});
+        await rename(filePath, finalPath);
+      } else {
+        // Delete the original raw file from .uploads, keep only WebM
+        await unlink(filePath);
+        await rename(outputPath, finalPath);
+      }
 
       // 5. Final DB Updates
-      const processedStats = await stat(finalWebmPath);
-
       await prisma.video.update({
         where: { id: videoId },
         data: {
           status: "COMPLETED",
-          processedPath: finalWebmPath,
-          processedSize: processedStats.size,
+          processedPath: finalPath,
+          processedSize: finalSize,
         },
       });
 
@@ -263,7 +273,7 @@ async function processVideo(job: Job) {
           startedAt: transcodeStartedAt,
           completedAt: new Date(),
           originalSize: videoRecord.originalSize,
-          processedSize: processedStats.size,
+          processedSize: transcodedStats.size,
         },
       });
 

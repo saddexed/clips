@@ -2,8 +2,8 @@ import Link from 'next/link';
 import { prisma } from '../lib/prisma';
 import { Video } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { VideoThumbnail } from '@/components/VideoThumbnail';
 import { HomeClient } from './HomeClient';
+import VideoGallery from '@/components/VideoGallery';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,10 +11,23 @@ export const metadata = {
   title: 'Clips',
 };
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams?: Promise<{ q?: string; tag?: string }>;
+}) {
+  await searchParams;
+
   const videos = await prisma.video.findMany({
-    where: { status: 'COMPLETED', deletedAt: null, isHidden: false },
-    orderBy: { date: 'desc' }
+    where: {
+      status: 'COMPLETED',
+      deletedAt: null,
+      isHidden: false,
+    },
+    orderBy: { date: 'desc' },
+    include: {
+      tags: true,
+    },
   });
 
   return (
@@ -34,63 +47,16 @@ export default async function Home() {
       </header>
       
       <main className="page-container" style={{ flex: 1 }}>
-        <div style={{ padding: '1rem 0 3rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div style={{ padding: '1rem 0 3rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <p style={{ color: 'var(--muted-foreground)', fontSize: '1.125rem', maxWidth: '600px', lineHeight: 1.6 }}>
             Random assortment of clips I have recorded over the years.
           </p>
+          <VideoGallery initialVideos={videos as any} />
         </div>
-
-        {videos.length === 0 ? (
-          <div className="glass-panel" style={{ padding: '4rem', textAlign: 'center', borderRadius: 'var(--radius)', color: 'var(--muted-foreground)' }}>
-            No videos available yet. Check back later!
-          </div>
-        ) : (
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
-            gap: '1.5rem',
-            width: '100%'
-          }}>
-            {videos.map(video => (
-              <Link key={video.id} href={`/w/${video.id}`} style={{ textDecoration: 'none' }}>
-                <div 
-                  className="glass-panel video-card-hover" 
-                  style={{ 
-                    borderRadius: 'var(--radius)', 
-                    overflow: 'hidden', 
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column'
-                  }}
-                >
-                  <VideoThumbnail 
-                    videoId={video.id} 
-                    duration={video.duration} 
-                    mediaType={video.mediaType as any}
-                  />
-                  <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                    <h3 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--foreground)', marginBottom: '0.25rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {video.title || video.filename}
-                    </h3>
-                    <div style={{ fontSize: '0.875rem', color: 'var(--muted-foreground)', marginTop: 'auto', paddingTop: '1rem' }}>
-                       {new Date(video.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
       </main>
       
       {/* Hidden Admin Keyboard Listener */}
       <HomeClient />
     </div>
   );
-}
-
-function formatDuration(seconds: number) {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
 }

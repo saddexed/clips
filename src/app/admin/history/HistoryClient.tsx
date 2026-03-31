@@ -66,10 +66,16 @@ export default function HistoryClient({ items }: { items: FlatHistoryItem[] }) {
                         Size: {formatBytes(job.originalSize)}
                       </div>
                     )}
-                    {job.jobType === 'TRANSCODE' && job.processedSize > 0 && (
-                      <div style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', marginTop: '0.1rem' }}>
-                        Result: {formatBytes(job.processedSize)}
-                      </div>
+                    {job.jobType === 'TRANSCODE' && Number(job.processedSize) > 0 && (
+                      Number(job.processedSize) > Number(job.originalSize) ? (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', marginTop: '0.1rem' }}>
+                          Kept original ({formatBytes(job.originalSize)}) &lt;- ({formatBytes(job.processedSize)})
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', marginTop: '0.1rem' }}>
+                          Result: {formatBytes(job.processedSize)}
+                        </div>
+                      )
                     )}
                   </td>
                   <td style={{ padding: '0.6rem 1rem' }}>

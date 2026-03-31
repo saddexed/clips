@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { LayoutDashboard, ListVideo, Upload, Activity, Home, History, LogOut } from 'lucide-react';
+import { LayoutDashboard, ListVideo, Upload, Activity, Home, History, LogOut, Settings } from 'lucide-react';
 import '../globals.css';
 import { GlobalUploadProvider } from '@/components/GlobalUploadProvider';
 import WorkerStatusBadge from '@/components/WorkerStatusBadge';
@@ -29,6 +29,7 @@ export default function AdminLayout({
               <NavLink href="/admin" icon={<ListVideo size={16} />} label="Manage" />
               <NavLink href="/admin/tasks" icon={<Activity size={16} />} label="Queue" />
               <NavLink href="/admin/history" icon={<History size={16} />} label="History" />
+              <NavLink href="/admin/settings" icon={<Settings size={16} />} label="Settings" />
             </div>
 
             <div style={{ paddingLeft: '1rem', borderLeft: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', fontSize: '0.75rem' }}>

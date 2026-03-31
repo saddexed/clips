@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useOptimistic, useTransition, useMemo } from 'react';
+import { useState, useEffect, useOptimistic, useTransition, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Pencil, X, Save, AlertCircle, CheckCircle, Clock, Activity, AlertTriangle, Eye, EyeOff, Trash2, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import SafeVideoPlayer from '@/components/SafeVideoPlayer';
+import SearchBar, { type SearchItem } from '@/components/SearchBar';
 
 type Video = {
   id: string;
@@ -38,6 +39,7 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
   }, [initialVideos]);
 
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
+  const [filteredIds, setFilteredIds] = useState<Set<string> | null>(null);
   
   const [sortField, setSortField] = useState<keyof Video>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -82,6 +84,26 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
     return list;
   }, [localVideos, sortField, sortOrder]);
 
+  const visibleVideos = useMemo(() => {
+    if (!filteredIds) return sortedVideos;
+    return sortedVideos.filter((video) => filteredIds.has(video.id));
+  }, [sortedVideos, filteredIds]);
+
+  const searchItems = useMemo<SearchItem[]>(
+    () =>
+      localVideos.map((video) => ({
+        id: video.id,
+        title: video.title,
+        filename: video.filename,
+        tags: video.tags || [],
+      })),
+    [localVideos]
+  );
+
+  const handleSearchResultsChange = useCallback((items: SearchItem[]) => {
+    setFilteredIds(new Set(items.map((item) => item.id)));
+  }, []);
+
   const handleEditComplete = (updatedVideo: Video) => {
     setLocalVideos(localVideos.map(v => v.id === updatedVideo.id ? updatedVideo : v));
     setEditingVideo(null);
@@ -116,8 +138,16 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
   };
   return (
     <>
-      <div className="glass-panel" style={{ borderRadius: 'var(--radius)', overflow: 'hidden' }}>
-        {sortedVideos.length === 0 ? (
+      <div style={{ marginBottom: '1rem' }}>
+        <SearchBar
+          items={searchItems}
+          onResultsChange={handleSearchResultsChange}
+          placeholder="Filter table by title or tags..."
+        />
+      </div>
+
+      <div className="glass-panel" style={{ borderRadius: 'var(--radius)', overflow: 'auto', maxHeight: '70vh' }}>
+        {visibleVideos.length === 0 ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted-foreground)' }}>
             <p>No videos found in the library.</p>
           </div>
@@ -136,7 +166,7 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
               </tr>
             </thead>
             <tbody>
-              {sortedVideos.map((vid) => (
+              {visibleVideos.map((vid) => (
                 <tr 
                   key={vid.id} 
                   style={{ 

@@ -3,9 +3,17 @@ import VideoTable from './VideoTable';
 
 export const dynamic = 'force-dynamic'; // Ensures this page isn't statically cached, always showing fresh DB state
 
-export default async function AdminManagePage() {
+export default async function AdminManagePage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ q?: string; tag?: string }>;
+}) {
+  await searchParams;
+
   const videos = await prisma.video.findMany({
-    where: { deletedAt: null },
+    where: {
+      deletedAt: null,
+    },
     orderBy: { uploadedAt: 'desc' },
     include: {
       tags: true, // Eager load tags for the editor

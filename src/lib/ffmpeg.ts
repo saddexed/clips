@@ -6,6 +6,8 @@ export type VideoMetadata = {
   height?: number;
   format?: string;
   creation_time?: string;
+  videoCodec?: string;
+  audioBitrate?: number;
   raw: any;
 };
 
@@ -55,6 +57,15 @@ export async function extractMetadata(filePath: string): Promise<VideoMetadata> 
         const videoStream = parsed.streams?.find(
           (s: any) => s.codec_type === "video"
         );
+        const audioStream = parsed.streams?.find(
+          (s: any) => s.codec_type === "audio"
+        );
+
+        const parsedAudioBitrate = audioStream?.bit_rate
+          ? parseInt(audioStream.bit_rate, 10)
+          : parsed.format?.bit_rate
+            ? parseInt(parsed.format.bit_rate, 10)
+            : undefined;
 
         const possibleDates: (string | undefined)[] = [
           parsed.format?.tags?.creation_time,
@@ -81,6 +92,8 @@ export async function extractMetadata(filePath: string): Promise<VideoMetadata> 
           height: videoStream?.height,
           format: parsed.format?.format_name,
           creation_time: oldestCreationTime,
+          videoCodec: videoStream?.codec_name,
+          audioBitrate: Number.isFinite(parsedAudioBitrate) ? parsedAudioBitrate : undefined,
           raw: parsed,
         });
       } catch (err) {
@@ -98,9 +111,15 @@ export async function transcodeToWebM(
   inputPath: string,
   outputPath: string,
   totalDurationSecs: number,
-  onProgress: (percent: number) => void
+  onProgress: (percent: number) => void,
+  sourceAudioBitrate?: number
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    const sourceAudioKbps = sourceAudioBitrate && sourceAudioBitrate > 0
+      ? Math.round(sourceAudioBitrate / 1000)
+      : 128;
+    const audioBitrateKbps = Math.max(48, Math.min(192, sourceAudioKbps));
+
     const args = [
       "-y", // Overwrite output files
       "-i", inputPath,
@@ -118,7 +137,7 @@ export async function transcodeToWebM(
       "-maxrate", "8M",
       "-bufsize", "16M",
       "-c:a", "libopus",
-      "-b:a", "128k",
+      "-b:a", `${audioBitrateKbps}k`,
       "-f", "webm",
       outputPath,
     ];
