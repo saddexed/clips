@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, EyeOff, MessageSquare, MessageSquareOff, MessagesSquare } from "lucide-react";
+import { Eye, EyeOff, MessageSquare, MessageSquareOff, MessagesSquare, RefreshCw } from "lucide-react";
+import { revalidateVideosCache } from "./actions";
 
 export default function SettingsClient({
   initialDefaultTags,
@@ -26,6 +27,21 @@ export default function SettingsClient({
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
+
+  const refreshCache = async () => {
+    setIsRefreshing(true);
+    setRefreshMessage(null);
+    try {
+      await revalidateVideosCache();
+      setRefreshMessage("Cache cleared — home page will reflect latest videos on next visit.");
+    } catch {
+      setRefreshMessage("Failed to refresh cache.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const iconButtonStyle: React.CSSProperties = {
     width: "2.1rem",
@@ -191,6 +207,29 @@ export default function SettingsClient({
 
       {message ? <p style={{ color: "#4ade80", marginTop: "0.75rem", fontSize: "0.85rem" }}>{message}</p> : null}
       {error ? <p style={{ color: "#f87171", marginTop: "0.75rem", fontSize: "0.85rem" }}>{error}</p> : null}
+
+      <div className="glass-panel" style={{ borderRadius: "var(--radius)", padding: "1.25rem", marginTop: "1.25rem" }}>
+        <h2 style={{ fontSize: "1.1rem", marginBottom: "0.35rem" }}>Cache</h2>
+        <p style={{ color: "var(--muted-foreground)", fontSize: "0.9rem", marginBottom: "1rem" }}>
+          The home page video list is cached for 60 seconds. Click below to purge it instantly so new uploads appear immediately.
+        </p>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <button
+            className="btn-secondary"
+            onClick={refreshCache}
+            disabled={isRefreshing}
+            style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
+          >
+            <RefreshCw size={15} style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }} />
+            {isRefreshing ? "Refreshing..." : "Refresh Cache"}
+          </button>
+          {refreshMessage && (
+            <p style={{ fontSize: "0.85rem", color: refreshMessage.startsWith("Failed") ? "#f87171" : "#4ade80", margin: 0 }}>
+              {refreshMessage}
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

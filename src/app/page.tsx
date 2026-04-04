@@ -5,11 +5,30 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { HomeClient } from './HomeClient';
 import VideoGallery from '@/components/VideoGallery';
 
-export const dynamic = 'force-dynamic';
+import { unstable_cache } from 'next/cache';
 
 export const metadata = {
   title: 'sd3xV',
 };
+
+const getVideos = unstable_cache(
+  async () => {
+    const videos = await prisma.video.findMany({
+      where: {
+        status: 'COMPLETED',
+        deletedAt: null,
+        isHidden: false,
+      },
+      orderBy: { date: 'desc' },
+      include: { tags: true },
+    });
+    // unstable_cache serializes via JSON.stringify — BigInt fields (e.g. fileSize)
+    // must be converted to Number first or the cache throws.
+    return JSON.parse(JSON.stringify(videos, (_, v) => typeof v === 'bigint' ? Number(v) : v));
+  },
+  ['videos'],
+  { revalidate: 60, tags: ['videos'] }
+);
 
 export default async function Home({
   searchParams,
@@ -18,17 +37,7 @@ export default async function Home({
 }) {
   await searchParams;
 
-  const videos = await prisma.video.findMany({
-    where: {
-      status: 'COMPLETED',
-      deletedAt: null,
-      isHidden: false,
-    },
-    orderBy: { date: 'desc' },
-    include: {
-      tags: true,
-    },
-  });
+  const videos = await getVideos();
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
