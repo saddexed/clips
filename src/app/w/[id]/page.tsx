@@ -84,7 +84,7 @@ export default async function WatchPage({
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <header style={{ position: 'sticky', top: 0, zIndex: 10, width: '100%', background: 'var(--glass)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderBottom: '1px solid var(--glass-border)' }}>
+      <header style={{ position: 'sticky', top: 0, left: 0, right: 0, zIndex: 10, width: '100%', background: 'var(--glass)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderBottom: '1px solid var(--glass-border)' }}>
         <div style={{ width: '100%', maxWidth: '1000px', margin: '0 auto', padding: '1rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
             <Link href="/" className="btn-secondary" style={{ padding: '0.5rem', borderRadius: '50%', textDecoration: 'none', display: 'flex' }}>
@@ -94,7 +94,7 @@ export default async function WatchPage({
               <div style={{ background: 'var(--foreground)', color: 'var(--background)', padding: '0.2rem 0.6rem', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Video size={18} fill="currentColor" />
               </div>
-              <span className="hidden sm:inline">Clips</span>
+              <span>sd3xV</span>
             </Link>
           </div>
           <ThemeToggle />

@@ -61,7 +61,7 @@ export default function VideoGallery({ initialVideos }: { initialVideos: Gallery
       ) : (
         <div className="video-grid" style={{ marginTop: "1.2rem" }}>
           {filteredVideos.map((video) => (
-            <Link key={video.id} href={`/w/${video.id}`} style={{ textDecoration: "none" }}>
+            <Link key={video.id} href={`/w/${video.id}`} prefetch={false} style={{ textDecoration: "none" }}>
               <div
                 className="glass-panel video-card-hover"
                 style={{

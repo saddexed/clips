@@ -3,7 +3,7 @@ import { ThemeProvider } from '@/components/ThemeProvider';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Clips',
+  title: 'sd3xV',
   description: 'A random assortment of video clips',
   icons: {
     icon: '/favicon.ico',
