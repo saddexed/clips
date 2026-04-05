@@ -35,6 +35,23 @@ export default function SearchBar({
 
   const [query, setQuery] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    const savedQuery = sessionStorage.getItem("clipsSearchQuery") || "";
+    const savedTags = sessionStorage.getItem("clipsSearchTags");
+    if (savedQuery) setQuery(savedQuery);
+    if (savedTags) {
+      try { setSelectedTags(JSON.parse(savedTags)); } catch {}
+    }
+    setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    sessionStorage.setItem("clipsSearchQuery", query);
+    sessionStorage.setItem("clipsSearchTags", JSON.stringify(selectedTags));
+  }, [query, selectedTags, isHydrated]);
   const [maxInlineSuggestions, setMaxInlineSuggestions] = useState(3);
   const shellRef = useRef<HTMLDivElement | null>(null);
 
