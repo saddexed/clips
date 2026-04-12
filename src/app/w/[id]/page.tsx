@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { headers } from 'next/headers';
 import Link from 'next/link';
 import { ArrowLeft, Clock, Share2, Download, Link2, Video } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -18,9 +19,14 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   }
   
   const title = video.title || video.filename;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+  const headersList = await headers();
+  const host = headersList.get('x-forwarded-host') || headersList.get('host');
+  const protocol = headersList.get('x-forwarded-proto') || 'http';
+  const appUrl = `${protocol}://${host}`;
+  
   const imageUrl = `${appUrl}/t/${id}`;
   const videoUrl = `${appUrl}/v/${id}`;
+  const playerUrl = `${appUrl}/w/${id}`;
 
   return {
     title,
@@ -39,7 +45,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
       images: [imageUrl],
       players: [
          {
-           playerUrl: `${appUrl}/w/${id}`,
+           playerUrl: playerUrl,
            streamUrl: videoUrl,
            width: video.width || 1280,
            height: video.height || 720,
