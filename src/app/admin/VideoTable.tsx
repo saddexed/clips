@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useOptimistic, useTransition, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Pencil, X, Save, AlertCircle, CheckCircle, Clock, Activity, AlertTriangle, Eye, EyeOff, Trash2, ArrowUpDown, ChevronUp, ChevronDown, MessageSquare, MessageSquareOff } from 'lucide-react';
+import { Pencil, X, Save, AlertCircle, CheckCircle, Clock, Activity, AlertTriangle, Eye, EyeOff, Trash2, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import SafeVideoPlayer from '@/components/SafeVideoPlayer';
 import SearchBar, { type SearchItem } from '@/components/SearchBar';
@@ -149,64 +149,6 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
     }
   };
 
-  const isCommentsEnabled = (video: Video) => {
-    const metadata = video.originalMetadata;
-    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return true;
-    return (metadata as Record<string, unknown>).commentsEnabled !== false;
-  };
-
-  const handleToggleComments = async (vid: Video) => {
-    const currentValue = isCommentsEnabled(vid);
-    const nextValue = !currentValue;
-
-    setLocalVideos((prev) =>
-      prev.map((v) =>
-        v.id === vid.id
-          ? {
-              ...v,
-              originalMetadata: {
-                ...(v.originalMetadata && typeof v.originalMetadata === 'object' && !Array.isArray(v.originalMetadata)
-                  ? v.originalMetadata
-                  : {}),
-                commentsEnabled: nextValue,
-              },
-            }
-          : v
-      )
-    );
-
-    try {
-      const res = await fetch(`/api/videos/${vid.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commentsEnabled: nextValue }),
-      });
-
-      if (!res.ok) {
-        throw new Error('Failed to update comments setting');
-      }
-
-      router.refresh();
-    } catch (e) {
-      console.error(e);
-      setLocalVideos((prev) =>
-        prev.map((v) =>
-          v.id === vid.id
-            ? {
-                ...v,
-                originalMetadata: {
-                  ...(v.originalMetadata && typeof v.originalMetadata === 'object' && !Array.isArray(v.originalMetadata)
-                    ? v.originalMetadata
-                    : {}),
-                  commentsEnabled: currentValue,
-                },
-              }
-            : v
-        )
-      );
-    }
-  };
-
   return (
     <>
       <div style={{ marginBottom: '1rem' }}>
@@ -328,25 +270,6 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
                         title="Edit metadata"
                       >
                         <Pencil size={20} />
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleToggleComments(vid); }}
-                        style={{
-                          padding: '0.4rem',
-                          background: isCommentsEnabled(vid) ? 'var(--secondary)' : 'rgba(245, 158, 11, 0.15)',
-                          border: 'none',
-                          borderRadius: '0.375rem',
-                          color: isCommentsEnabled(vid) ? 'var(--foreground)' : '#f59e0b',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          transition: 'background-color 0.2s'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isCommentsEnabled(vid) ? 'rgba(255,255,255,0.1)' : 'rgba(245, 158, 11, 0.25)'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isCommentsEnabled(vid) ? 'var(--secondary)' : 'rgba(245, 158, 11, 0.15)'}
-                        title={isCommentsEnabled(vid) ? 'Comments enabled (click to disable)' : 'Comments disabled (click to enable)'}
-                      >
-                        {isCommentsEnabled(vid) ? <MessageSquare size={20} /> : <MessageSquareOff size={20} />}
                       </button>
                       <button 
                         onClick={(e) => { e.stopPropagation(); handleDeleteInline(vid.id); }}

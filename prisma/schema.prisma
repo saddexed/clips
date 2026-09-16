@@ -63,24 +63,12 @@ model Video {
   deletedAt        DateTime?
   isHidden         Boolean     @default(false)
 
-  comments   Comment[]
   tags       Tag[]        @relation("VideoTags")
   jobHistory JobHistory[]
 
   @@index([status])
   @@index([createdAt])
   @@map("videos")
-}
-
-model Comment {
-  id        String   @id @default(uuid())
-  content   String
-  videoId   String
-  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-
-  @@index([videoId])
-  @@map("comments")
 }
 
 model Tag {

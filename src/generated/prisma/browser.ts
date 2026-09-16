@@ -23,11 +23,6 @@ export * from './enums';
  */
 export type Video = Prisma.VideoModel
 /**
- * Model Comment
- * 
- */
-export type Comment = Prisma.CommentModel
-/**
  * Model Tag
  * 
  */

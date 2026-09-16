@@ -69,26 +69,6 @@ export async function setDefaultTags(tags: string[]): Promise<string[]> {
   return normalized;
 }
 
-export async function getDefaultCommentsEnabled(): Promise<boolean> {
-  const rawValue = await getSettingValue("default_comments_enabled");
-  return typeof rawValue === "boolean" ? rawValue : false;
-}
-
-export async function setDefaultCommentsEnabled(enabled: boolean): Promise<boolean> {
-  await setSettingValue("default_comments_enabled", Boolean(enabled));
-  return Boolean(enabled);
-}
-
-export async function getGlobalCommentsEnabled(): Promise<boolean> {
-  const rawValue = await getSettingValue("global_comments_enabled");
-  return typeof rawValue === "boolean" ? rawValue : true;
-}
-
-export async function setGlobalCommentsEnabled(enabled: boolean): Promise<boolean> {
-  await setSettingValue("global_comments_enabled", Boolean(enabled));
-  return Boolean(enabled);
-}
-
 export async function getDefaultVisibilityEnabled(): Promise<boolean> {
   const rawValue = await getSettingValue("default_visibility_enabled");
   return typeof rawValue === "boolean" ? rawValue : false;
@@ -100,15 +80,13 @@ export async function setDefaultVisibilityEnabled(enabled: boolean): Promise<boo
 }
 
 export async function getUploadDefaults() {
-  const [tags, commentsEnabled, visibilityEnabled] = await Promise.all([
+  const [tags, visibilityEnabled] = await Promise.all([
     getDefaultTags(),
-    getDefaultCommentsEnabled(),
     getDefaultVisibilityEnabled(),
   ]);
 
   return {
     tags,
-    commentsEnabled,
     visibilityEnabled,
   };
 }

@@ -52,7 +52,6 @@ export const AnyNull = runtime.AnyNull
 
 export const ModelName = {
   Video: 'Video',
-  Comment: 'Comment',
   Tag: 'Tag',
   JobHistory: 'JobHistory'
 } as const
@@ -97,16 +96,6 @@ export const VideoScalarFieldEnum = {
 } as const
 
 export type VideoScalarFieldEnum = (typeof VideoScalarFieldEnum)[keyof typeof VideoScalarFieldEnum]
-
-
-export const CommentScalarFieldEnum = {
-  id: 'id',
-  content: 'content',
-  videoId: 'videoId',
-  createdAt: 'createdAt'
-} as const
-
-export type CommentScalarFieldEnum = (typeof CommentScalarFieldEnum)[keyof typeof CommentScalarFieldEnum]
 
 
 export const TagScalarFieldEnum = {

@@ -81,12 +81,6 @@ ffmpeg -y -i inputPath -c:v libvpx-vp9 -profile:v 2 -pix_fmt yuv420p10le -deadli
 
 The current settings are a balance between quality and encoding speed for an 4 core Oracle ARM server.  
 In case you want to adjust the encoding settings, you can modify the arguments as needed. The args reside in `src/lib/ffmpeg.ts` in the `transcodeToWebM` function, which is called by the worker when processing videos.
-> [!WARNING]
-> **HVC1 Video Encoding Issue**
->
-> HVC1 encoded videos may experience frame reversal during transcoding. This appears to be an FFmpeg limitation rather than a project issue. If you encounter this problem and have a solution, please open an issue or reach out to me.
-
-
 
 ---
 

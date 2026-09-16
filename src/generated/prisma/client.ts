@@ -47,11 +47,6 @@ export { Prisma }
  */
 export type Video = Prisma.VideoModel
 /**
- * Model Comment
- * 
- */
-export type Comment = Prisma.CommentModel
-/**
  * Model Tag
  * 
  */

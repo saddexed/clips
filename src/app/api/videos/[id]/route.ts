@@ -20,11 +20,11 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, description, tags, isHidden, date, commentsEnabled } = body;
+    const { title, description, tags, isHidden, date } = body;
 
     const existingVideo = await prisma.video.findUnique({
       where: { id },
-      select: { originalMetadata: true },
+      select: { id: true },
     });
 
     if (!existingVideo) {
@@ -37,19 +37,6 @@ export async function PATCH(
     if (description !== undefined) updateData.description = description;
     if (isHidden !== undefined) updateData.isHidden = isHidden;
     if (date !== undefined) updateData.date = new Date(date);
-    if (commentsEnabled !== undefined) {
-      const currentMetadata =
-        existingVideo.originalMetadata &&
-        typeof existingVideo.originalMetadata === "object" &&
-        !Array.isArray(existingVideo.originalMetadata)
-          ? (existingVideo.originalMetadata as Record<string, unknown>)
-          : {};
-
-      updateData.originalMetadata = {
-        ...currentMetadata,
-        commentsEnabled: Boolean(commentsEnabled),
-      };
-    }
 
     // Handle Tags (Many-to-Many relation)
     if (Array.isArray(tags)) {
@@ -87,11 +74,7 @@ export async function PATCH(
         jobType: isHideAction ? "HIDE" : "EDIT",
         status: "COMPLETED",
         completedAt: new Date(),
-        ...(isHideAction
-          ? { metadata: { isHidden } }
-          : commentsEnabled !== undefined && Object.keys(updateData).length === 1
-          ? { metadata: { commentsEnabled: Boolean(commentsEnabled) } }
-          : {})
+        ...(isHideAction ? { metadata: { isHidden } } : {}),
       }
     });
 

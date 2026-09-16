@@ -82,8 +82,7 @@ export async function POST(request: NextRequest) {
         originalMetadata: {
           originalFilename: file.name,
           contentType: file.type,
-          commentsEnabled: defaults.commentsEnabled,
-        }, // Store original name in metadata and behavior flags
+        },
         ...(defaults.tags.length > 0
           ? {
               tags: {

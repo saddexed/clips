@@ -9,7 +9,6 @@
  * 🟢 You can import this file directly.
  */
 export type * from './models/Video'
-export type * from './models/Comment'
 export type * from './models/Tag'
 export type * from './models/JobHistory'
 export type * from './commonInputTypes'

@@ -348,7 +348,6 @@ export type VideoWhereInput = {
   updatedAt?: Prisma.DateTimeFilter<"Video"> | Date | string
   deletedAt?: Prisma.DateTimeNullableFilter<"Video"> | Date | string | null
   isHidden?: Prisma.BoolFilter<"Video"> | boolean
-  comments?: Prisma.CommentListRelationFilter
   tags?: Prisma.TagListRelationFilter
   jobHistory?: Prisma.JobHistoryListRelationFilter
 }
@@ -374,7 +373,6 @@ export type VideoOrderByWithRelationInput = {
   updatedAt?: Prisma.SortOrder
   deletedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   isHidden?: Prisma.SortOrder
-  comments?: Prisma.CommentOrderByRelationAggregateInput
   tags?: Prisma.TagOrderByRelationAggregateInput
   jobHistory?: Prisma.JobHistoryOrderByRelationAggregateInput
 }
@@ -403,7 +401,6 @@ export type VideoWhereUniqueInput = Prisma.AtLeast<{
   updatedAt?: Prisma.DateTimeFilter<"Video"> | Date | string
   deletedAt?: Prisma.DateTimeNullableFilter<"Video"> | Date | string | null
   isHidden?: Prisma.BoolFilter<"Video"> | boolean
-  comments?: Prisma.CommentListRelationFilter
   tags?: Prisma.TagListRelationFilter
   jobHistory?: Prisma.JobHistoryListRelationFilter
 }, "id">
@@ -483,7 +480,6 @@ export type VideoCreateInput = {
   updatedAt?: Date | string
   deletedAt?: Date | string | null
   isHidden?: boolean
-  comments?: Prisma.CommentCreateNestedManyWithoutVideoInput
   tags?: Prisma.TagCreateNestedManyWithoutVideosInput
   jobHistory?: Prisma.JobHistoryCreateNestedManyWithoutVideoInput
 }
@@ -509,7 +505,6 @@ export type VideoUncheckedCreateInput = {
   updatedAt?: Date | string
   deletedAt?: Date | string | null
   isHidden?: boolean
-  comments?: Prisma.CommentUncheckedCreateNestedManyWithoutVideoInput
   tags?: Prisma.TagUncheckedCreateNestedManyWithoutVideosInput
   jobHistory?: Prisma.JobHistoryUncheckedCreateNestedManyWithoutVideoInput
 }
@@ -535,7 +530,6 @@ export type VideoUpdateInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  comments?: Prisma.CommentUpdateManyWithoutVideoNestedInput
   tags?: Prisma.TagUpdateManyWithoutVideosNestedInput
   jobHistory?: Prisma.JobHistoryUpdateManyWithoutVideoNestedInput
 }
@@ -561,7 +555,6 @@ export type VideoUncheckedUpdateInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  comments?: Prisma.CommentUncheckedUpdateManyWithoutVideoNestedInput
   tags?: Prisma.TagUncheckedUpdateManyWithoutVideosNestedInput
   jobHistory?: Prisma.JobHistoryUncheckedUpdateManyWithoutVideoNestedInput
 }
@@ -718,11 +711,6 @@ export type VideoSumOrderByAggregateInput = {
   height?: Prisma.SortOrder
 }
 
-export type VideoScalarRelationFilter = {
-  is?: Prisma.VideoWhereInput
-  isNot?: Prisma.VideoWhereInput
-}
-
 export type VideoListRelationFilter = {
   every?: Prisma.VideoWhereInput
   some?: Prisma.VideoWhereInput
@@ -790,20 +778,6 @@ export type BoolFieldUpdateOperationsInput = {
   set?: boolean
 }
 
-export type VideoCreateNestedOneWithoutCommentsInput = {
-  create?: Prisma.XOR<Prisma.VideoCreateWithoutCommentsInput, Prisma.VideoUncheckedCreateWithoutCommentsInput>
-  connectOrCreate?: Prisma.VideoCreateOrConnectWithoutCommentsInput
-  connect?: Prisma.VideoWhereUniqueInput
-}
-
-export type VideoUpdateOneRequiredWithoutCommentsNestedInput = {
-  create?: Prisma.XOR<Prisma.VideoCreateWithoutCommentsInput, Prisma.VideoUncheckedCreateWithoutCommentsInput>
-  connectOrCreate?: Prisma.VideoCreateOrConnectWithoutCommentsInput
-  upsert?: Prisma.VideoUpsertWithoutCommentsInput
-  connect?: Prisma.VideoWhereUniqueInput
-  update?: Prisma.XOR<Prisma.XOR<Prisma.VideoUpdateToOneWithWhereWithoutCommentsInput, Prisma.VideoUpdateWithoutCommentsInput>, Prisma.VideoUncheckedUpdateWithoutCommentsInput>
-}
-
 export type VideoCreateNestedManyWithoutTagsInput = {
   create?: Prisma.XOR<Prisma.VideoCreateWithoutTagsInput, Prisma.VideoUncheckedCreateWithoutTagsInput> | Prisma.VideoCreateWithoutTagsInput[] | Prisma.VideoUncheckedCreateWithoutTagsInput[]
   connectOrCreate?: Prisma.VideoCreateOrConnectWithoutTagsInput | Prisma.VideoCreateOrConnectWithoutTagsInput[]
@@ -858,122 +832,6 @@ export type VideoUpdateOneWithoutJobHistoryNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.VideoUpdateToOneWithWhereWithoutJobHistoryInput, Prisma.VideoUpdateWithoutJobHistoryInput>, Prisma.VideoUncheckedUpdateWithoutJobHistoryInput>
 }
 
-export type VideoCreateWithoutCommentsInput = {
-  id?: string
-  filename: string
-  originalPath: string
-  processedPath?: string | null
-  originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
-  title?: string
-  description?: string
-  mediaType?: $Enums.MediaType
-  status?: $Enums.VideoStatus
-  originalSize?: bigint | number
-  processedSize?: bigint | number
-  duration?: number | null
-  width?: number | null
-  height?: number | null
-  createdAt?: Date | string
-  uploadedAt?: Date | string
-  date?: Date | string
-  updatedAt?: Date | string
-  deletedAt?: Date | string | null
-  isHidden?: boolean
-  tags?: Prisma.TagCreateNestedManyWithoutVideosInput
-  jobHistory?: Prisma.JobHistoryCreateNestedManyWithoutVideoInput
-}
-
-export type VideoUncheckedCreateWithoutCommentsInput = {
-  id?: string
-  filename: string
-  originalPath: string
-  processedPath?: string | null
-  originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
-  title?: string
-  description?: string
-  mediaType?: $Enums.MediaType
-  status?: $Enums.VideoStatus
-  originalSize?: bigint | number
-  processedSize?: bigint | number
-  duration?: number | null
-  width?: number | null
-  height?: number | null
-  createdAt?: Date | string
-  uploadedAt?: Date | string
-  date?: Date | string
-  updatedAt?: Date | string
-  deletedAt?: Date | string | null
-  isHidden?: boolean
-  tags?: Prisma.TagUncheckedCreateNestedManyWithoutVideosInput
-  jobHistory?: Prisma.JobHistoryUncheckedCreateNestedManyWithoutVideoInput
-}
-
-export type VideoCreateOrConnectWithoutCommentsInput = {
-  where: Prisma.VideoWhereUniqueInput
-  create: Prisma.XOR<Prisma.VideoCreateWithoutCommentsInput, Prisma.VideoUncheckedCreateWithoutCommentsInput>
-}
-
-export type VideoUpsertWithoutCommentsInput = {
-  update: Prisma.XOR<Prisma.VideoUpdateWithoutCommentsInput, Prisma.VideoUncheckedUpdateWithoutCommentsInput>
-  create: Prisma.XOR<Prisma.VideoCreateWithoutCommentsInput, Prisma.VideoUncheckedCreateWithoutCommentsInput>
-  where?: Prisma.VideoWhereInput
-}
-
-export type VideoUpdateToOneWithWhereWithoutCommentsInput = {
-  where?: Prisma.VideoWhereInput
-  data: Prisma.XOR<Prisma.VideoUpdateWithoutCommentsInput, Prisma.VideoUncheckedUpdateWithoutCommentsInput>
-}
-
-export type VideoUpdateWithoutCommentsInput = {
-  id?: Prisma.StringFieldUpdateOperationsInput | string
-  filename?: Prisma.StringFieldUpdateOperationsInput | string
-  originalPath?: Prisma.StringFieldUpdateOperationsInput | string
-  processedPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
-  title?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
-  mediaType?: Prisma.EnumMediaTypeFieldUpdateOperationsInput | $Enums.MediaType
-  status?: Prisma.EnumVideoStatusFieldUpdateOperationsInput | $Enums.VideoStatus
-  originalSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
-  processedSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
-  duration?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
-  width?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
-  height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
-  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
-  uploadedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
-  date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
-  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
-  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  tags?: Prisma.TagUpdateManyWithoutVideosNestedInput
-  jobHistory?: Prisma.JobHistoryUpdateManyWithoutVideoNestedInput
-}
-
-export type VideoUncheckedUpdateWithoutCommentsInput = {
-  id?: Prisma.StringFieldUpdateOperationsInput | string
-  filename?: Prisma.StringFieldUpdateOperationsInput | string
-  originalPath?: Prisma.StringFieldUpdateOperationsInput | string
-  processedPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  originalMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
-  title?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
-  mediaType?: Prisma.EnumMediaTypeFieldUpdateOperationsInput | $Enums.MediaType
-  status?: Prisma.EnumVideoStatusFieldUpdateOperationsInput | $Enums.VideoStatus
-  originalSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
-  processedSize?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
-  duration?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
-  width?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
-  height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
-  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
-  uploadedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
-  date?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
-  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
-  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  tags?: Prisma.TagUncheckedUpdateManyWithoutVideosNestedInput
-  jobHistory?: Prisma.JobHistoryUncheckedUpdateManyWithoutVideoNestedInput
-}
-
 export type VideoCreateWithoutTagsInput = {
   id?: string
   filename: string
@@ -995,7 +853,6 @@ export type VideoCreateWithoutTagsInput = {
   updatedAt?: Date | string
   deletedAt?: Date | string | null
   isHidden?: boolean
-  comments?: Prisma.CommentCreateNestedManyWithoutVideoInput
   jobHistory?: Prisma.JobHistoryCreateNestedManyWithoutVideoInput
 }
 
@@ -1020,7 +877,6 @@ export type VideoUncheckedCreateWithoutTagsInput = {
   updatedAt?: Date | string
   deletedAt?: Date | string | null
   isHidden?: boolean
-  comments?: Prisma.CommentUncheckedCreateNestedManyWithoutVideoInput
   jobHistory?: Prisma.JobHistoryUncheckedCreateNestedManyWithoutVideoInput
 }
 
@@ -1092,7 +948,6 @@ export type VideoCreateWithoutJobHistoryInput = {
   updatedAt?: Date | string
   deletedAt?: Date | string | null
   isHidden?: boolean
-  comments?: Prisma.CommentCreateNestedManyWithoutVideoInput
   tags?: Prisma.TagCreateNestedManyWithoutVideosInput
 }
 
@@ -1117,7 +972,6 @@ export type VideoUncheckedCreateWithoutJobHistoryInput = {
   updatedAt?: Date | string
   deletedAt?: Date | string | null
   isHidden?: boolean
-  comments?: Prisma.CommentUncheckedCreateNestedManyWithoutVideoInput
   tags?: Prisma.TagUncheckedCreateNestedManyWithoutVideosInput
 }
 
@@ -1158,7 +1012,6 @@ export type VideoUpdateWithoutJobHistoryInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  comments?: Prisma.CommentUpdateManyWithoutVideoNestedInput
   tags?: Prisma.TagUpdateManyWithoutVideosNestedInput
 }
 
@@ -1183,7 +1036,6 @@ export type VideoUncheckedUpdateWithoutJobHistoryInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  comments?: Prisma.CommentUncheckedUpdateManyWithoutVideoNestedInput
   tags?: Prisma.TagUncheckedUpdateManyWithoutVideosNestedInput
 }
 
@@ -1208,7 +1060,6 @@ export type VideoUpdateWithoutTagsInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  comments?: Prisma.CommentUpdateManyWithoutVideoNestedInput
   jobHistory?: Prisma.JobHistoryUpdateManyWithoutVideoNestedInput
 }
 
@@ -1233,7 +1084,6 @@ export type VideoUncheckedUpdateWithoutTagsInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   isHidden?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  comments?: Prisma.CommentUncheckedUpdateManyWithoutVideoNestedInput
   jobHistory?: Prisma.JobHistoryUncheckedUpdateManyWithoutVideoNestedInput
 }
 
@@ -1266,13 +1116,11 @@ export type VideoUncheckedUpdateManyWithoutTagsInput = {
  */
 
 export type VideoCountOutputType = {
-  comments: number
   tags: number
   jobHistory: number
 }
 
 export type VideoCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
-  comments?: boolean | VideoCountOutputTypeCountCommentsArgs
   tags?: boolean | VideoCountOutputTypeCountTagsArgs
   jobHistory?: boolean | VideoCountOutputTypeCountJobHistoryArgs
 }
@@ -1285,13 +1133,6 @@ export type VideoCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extens
    * Select specific fields to fetch from the VideoCountOutputType
    */
   select?: Prisma.VideoCountOutputTypeSelect<ExtArgs> | null
-}
-
-/**
- * VideoCountOutputType without action
- */
-export type VideoCountOutputTypeCountCommentsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
-  where?: Prisma.CommentWhereInput
 }
 
 /**
@@ -1330,7 +1171,6 @@ export type VideoSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   updatedAt?: boolean
   deletedAt?: boolean
   isHidden?: boolean
-  comments?: boolean | Prisma.Video$commentsArgs<ExtArgs>
   tags?: boolean | Prisma.Video$tagsArgs<ExtArgs>
   jobHistory?: boolean | Prisma.Video$jobHistoryArgs<ExtArgs>
   _count?: boolean | Prisma.VideoCountOutputTypeDefaultArgs<ExtArgs>
@@ -1407,7 +1247,6 @@ export type VideoSelectScalar = {
 
 export type VideoOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "filename" | "originalPath" | "processedPath" | "originalMetadata" | "title" | "description" | "mediaType" | "status" | "originalSize" | "processedSize" | "duration" | "width" | "height" | "createdAt" | "uploadedAt" | "date" | "updatedAt" | "deletedAt" | "isHidden", ExtArgs["result"]["video"]>
 export type VideoInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
-  comments?: boolean | Prisma.Video$commentsArgs<ExtArgs>
   tags?: boolean | Prisma.Video$tagsArgs<ExtArgs>
   jobHistory?: boolean | Prisma.Video$jobHistoryArgs<ExtArgs>
   _count?: boolean | Prisma.VideoCountOutputTypeDefaultArgs<ExtArgs>
@@ -1418,7 +1257,6 @@ export type VideoIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extens
 export type $VideoPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "Video"
   objects: {
-    comments: Prisma.$CommentPayload<ExtArgs>[]
     tags: Prisma.$TagPayload<ExtArgs>[]
     jobHistory: Prisma.$JobHistoryPayload<ExtArgs>[]
   }
@@ -1837,7 +1675,6 @@ readonly fields: VideoFieldRefs;
  */
 export interface Prisma__VideoClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
-  comments<T extends Prisma.Video$commentsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Video$commentsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$CommentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   tags<T extends Prisma.Video$tagsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Video$tagsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TagPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   jobHistory<T extends Prisma.Video$jobHistoryArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Video$jobHistoryArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$JobHistoryPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
@@ -2274,30 +2111,6 @@ export type VideoDeleteManyArgs<ExtArgs extends runtime.Types.Extensions.Interna
    * Limit how many Videos to delete.
    */
   limit?: number
-}
-
-/**
- * Video.comments
- */
-export type Video$commentsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
-  /**
-   * Select specific fields to fetch from the Comment
-   */
-  select?: Prisma.CommentSelect<ExtArgs> | null
-  /**
-   * Omit specific fields from the Comment
-   */
-  omit?: Prisma.CommentOmit<ExtArgs> | null
-  /**
-   * Choose, which related nodes to fetch as well
-   */
-  include?: Prisma.CommentInclude<ExtArgs> | null
-  where?: Prisma.CommentWhereInput
-  orderBy?: Prisma.CommentOrderByWithRelationInput | Prisma.CommentOrderByWithRelationInput[]
-  cursor?: Prisma.CommentWhereUniqueInput
-  take?: number
-  skip?: number
-  distinct?: Prisma.CommentScalarFieldEnum | Prisma.CommentScalarFieldEnum[]
 }
 
 /**
