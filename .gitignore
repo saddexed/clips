@@ -30,3 +30,6 @@ prisma/*.db-journal
 temp.txt
 .agents/
 data/
+misc/
+
+*.md

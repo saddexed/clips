@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { repository } from "@/lib/repository";
 import fs from "node:fs";
 import { stat } from "node:fs/promises";
 import { Readable } from "node:stream";
@@ -8,22 +8,29 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
   try {
-    const video = await prisma.video.findUnique({
+    const video = await repository.video.findUnique({
       where: { id },
     });
 
     if (!video || !video.processedPath || video.status !== "COMPLETED") {
-      return new NextResponse("Video not found or still processing", { status: 404 });
+      return new NextResponse("Video not found or still processing", {
+        status: 404,
+      });
     }
 
     let filePath = video.processedPath;
-    if (filePath && filePath.startsWith('/app/data') && process.env.DATA_PATH && process.env.DATA_PATH !== '/app/data') {
-      filePath = filePath.replace('/app/data', process.env.DATA_PATH);
+    if (
+      filePath &&
+      filePath.startsWith("/app/data") &&
+      process.env.DATA_PATH &&
+      process.env.DATA_PATH !== "/app/data"
+    ) {
+      filePath = filePath.replace("/app/data", process.env.DATA_PATH);
     }
 
     try {
@@ -59,7 +66,8 @@ export async function GET(
           "Content-Range": `bytes ${start}-${end}/${size}`,
           "Accept-Ranges": "bytes",
           "Content-Length": chunksize.toString(),
-          "Content-Type": video.mediaType === "IMAGE" ? "image/webp" : "video/webm",
+          "Content-Type":
+            video.mediaType === "IMAGE" ? "image/webp" : "video/webm",
         },
       });
     } else {
@@ -70,7 +78,8 @@ export async function GET(
         status: 200,
         headers: {
           "Content-Length": size.toString(),
-          "Content-Type": video.mediaType === "IMAGE" ? "image/webp" : "video/webm",
+          "Content-Type":
+            video.mediaType === "IMAGE" ? "image/webp" : "video/webm",
           "Accept-Ranges": "bytes",
         },
       });

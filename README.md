@@ -1,99 +1,55 @@
 # Clips
 
-A full-stack web application built with Next.js, Prisma, PostgreSQL, and Redis-backed workers (BullMQ), orchestrated with Docker.  
-This is what [https://clips.saddexed.dev/](https://clips.saddexed.dev/) is based on.
+A Bun-hosted media library built with Next.js. Application records, settings, and the durable background-work queue are stored in `data/clips.db` through `bun:sqlite`.
 
-## Prerequisites
+## Requirements
 
-Make sure you have the following installed:
-- [Node.js](https://nodejs.org/en/) (v18 or higher recommended)
-- [npm](https://www.npmjs.com/)
-- [Docker & Docker Compose](https://www.docker.com/) (for running Postgres, Redis, or the entire stack)
+- [Bun](https://bun.sh/) 1.3 or later
+- `ffmpeg` available on `PATH`
 
-## Getting Started (Development)
-
-### 1. Install Dependencies
+## Setup
 
 ```bash
-npm install
+bun install
 ```
 
-### 2. Configure Environment Variables
+The database is created automatically at `file:./data/clips.db` on the first application or worker start. Configure a different location with `DATABASE_URL` using a `file:` URL.
 
-Create a `.env` file in the root directory by copying the example or defining the necessary variables:
-(You will need connections configured for `DATABASE_URL` and `REDIS_URL` at a minimum.)
+```dotenv
+DATABASE_URL=file:./data/clips.db
+DATA_PATH=./data
+ADMIN_PASSWORD=your_admin_password
+AUTH_SECRET=replace_with_a_long_random_secret
+```
 
-### 3. Database Setup (Prisma)
+## Run
 
-If you're running PostgreSQL locally (e.g., via Docker), initialize your database:
+Start the web application:
 
 ```bash
-npx prisma generate
-npx prisma db push
+bun run dev
 ```
 
-### 4. Run the Development Server
-
-Start the Next.js frontend:
+In a separate terminal, start the in-process SQLite worker:
 
 ```bash
-npm run dev
+bun run worker:start
 ```
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-### 5. Start the Background Worker
-
-In a separate terminal, start the worker process (handles background tasks via BullMQ):
+For production:
 
 ```bash
-npx tsx src/worker/index.ts
+bun run build
+bun run start
+bun run worker:start
 ```
 
-## Getting Started (Prod/Docker)
+The worker claims one durable SQLite job at a time. Jobs interrupted by a process crash are recovered after their lease expires; failed jobs are retried up to three times. Keep a single app/worker deployment against each database file.
 
-You can run the entire application stack using Docker Compose.
+## Migration Note
 
-### Fresh Production Setup 
-Drops volumes, rebuilds, pushes DB schema, and restarts:
+This migration creates a new SQLite database. Export existing PostgreSQL records before retiring the old deployment if its library or history must be retained; PostgreSQL data cannot be read directly from `clips.db`.
 
-```bash
-docker compose down -v
-docker compose up -d --build
-docker compose exec -T app npx prisma db push --accept-data-loss
-docker compose restart app worker
-```
 
-### Update Production
-Rebuilds, applies schema updates, and restarts:
-
-```bash
-docker compose up -d --build
-docker compose exec -T app npx prisma db push --accept-data-loss
-docker compose restart app worker
-```
-
-## FFMpeg Command Arguments
-This is the command used for video processing in the worker, with arguments optimized for VP9 encoding and Opus audio:
-
-```bash
-ffmpeg -y -i inputPath -c:v libvpx-vp9 -profile:v 2 -pix_fmt yuv420p10le -deadline good -cpu-used 3 -tile-columns 2 -tile-rows 1 -threads 4 -row-mt 1 -crf 30 -b:v 8M -maxrate 8M -bufsize 16M -c:a libopus -b:a ${audioBitrateKbps}k -f webm
-```
-
-The current settings are a balance between quality and encoding speed for an 4 core Oracle ARM server.  
-In case you want to adjust the encoding settings, you can modify the arguments as needed. The args reside in `src/lib/ffmpeg.ts` in the `transcodeToWebM` function, which is called by the worker when processing videos.
-
----
-
-## Useful Commands Reference
-
-### Database Commands (Prisma)
-- **Generate Client:** `npx prisma generate`
-- **Migrate Dev:** `npx prisma migrate dev`
-- **Push Schema:** `npx prisma db push`
-- **Studio (UI):** `npx prisma studio` (Opens a web-based database editor)
-- **Reset DB:** `npx prisma migrate reset --force`
-- **Production Push:** `npx prisma db push --accept-data-loss`
-
-### Docker Deployment
-- **Start:** `docker compose up -d --build`
-- **Stop:** `docker compose down`
+prerequrisits:
+ffmpeg in path

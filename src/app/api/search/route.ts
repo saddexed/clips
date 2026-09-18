@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { repository } from "@/lib/repository";
 
 export async function GET(request: NextRequest) {
   try {
     const q = (request.nextUrl.searchParams.get("q") || "").trim();
-    const context = (request.nextUrl.searchParams.get("context") || "public").toLowerCase();
+    const context = (
+      request.nextUrl.searchParams.get("context") || "public"
+    ).toLowerCase();
 
     if (!q) {
       return NextResponse.json({ tags: [], videos: [] });
@@ -12,7 +14,7 @@ export async function GET(request: NextRequest) {
 
     const isAdmin = context === "admin";
 
-    const tags = await prisma.tag.findMany({
+    const tags = await repository.tag.findMany({
       where: {
         name: {
           contains: q,
@@ -26,7 +28,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const videos = await prisma.video.findMany({
+    const videos = await repository.video.findMany({
       where: {
         deletedAt: null,
         ...(isAdmin ? {} : { status: "COMPLETED", isHidden: false }),

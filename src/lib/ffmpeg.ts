@@ -24,17 +24,23 @@ export function killActiveFfmpegProcess(): boolean {
 /**
  * Extracts metadata from a video file using ffprobe.
  */
-export async function extractMetadata(filePath: string): Promise<VideoMetadata> {
+export async function extractMetadata(
+  filePath: string,
+): Promise<VideoMetadata> {
   return new Promise((resolve, reject) => {
     const args = [
-      "-v", "quiet",
-      "-print_format", "json",
+      "-v",
+      "quiet",
+      "-print_format",
+      "json",
       "-show_format",
       "-show_streams",
       filePath,
     ];
 
     const ffprobe = spawn("ffprobe", args);
+
+    ffprobe.once("error", reject);
 
     let stdout = "";
     let stderr = "";
@@ -55,10 +61,10 @@ export async function extractMetadata(filePath: string): Promise<VideoMetadata> 
       try {
         const parsed = JSON.parse(stdout);
         const videoStream = parsed.streams?.find(
-          (s: any) => s.codec_type === "video"
+          (s: any) => s.codec_type === "video",
         );
         const audioStream = parsed.streams?.find(
-          (s: any) => s.codec_type === "audio"
+          (s: any) => s.codec_type === "audio",
         );
 
         const parsedAudioBitrate = audioStream?.bit_rate
@@ -70,10 +76,10 @@ export async function extractMetadata(filePath: string): Promise<VideoMetadata> 
         const possibleDates: (string | undefined)[] = [
           parsed.format?.tags?.creation_time,
           videoStream?.tags?.creation_time,
-          ...(parsed.streams?.map((s: any) => s.tags?.creation_time) || [])
+          ...(parsed.streams?.map((s: any) => s.tags?.creation_time) || []),
         ];
 
-        let oldestCreationTime: string | undefined = undefined;
+        let oldestCreationTime: string | undefined;
         let oldestTimeMs = Infinity;
 
         for (const d of possibleDates) {
@@ -87,13 +93,17 @@ export async function extractMetadata(filePath: string): Promise<VideoMetadata> 
         }
 
         resolve({
-          duration: parsed.format?.duration ? parseFloat(parsed.format.duration) : undefined,
+          duration: parsed.format?.duration
+            ? parseFloat(parsed.format.duration)
+            : undefined,
           width: videoStream?.width,
           height: videoStream?.height,
           format: parsed.format?.format_name,
           creation_time: oldestCreationTime,
           videoCodec: videoStream?.codec_name,
-          audioBitrate: Number.isFinite(parsedAudioBitrate) ? parsedAudioBitrate : undefined,
+          audioBitrate: Number.isFinite(parsedAudioBitrate)
+            ? parsedAudioBitrate
+            : undefined,
           raw: parsed,
         });
       } catch (err) {
@@ -112,33 +122,51 @@ export async function transcodeToWebM(
   outputPath: string,
   totalDurationSecs: number,
   onProgress: (percent: number) => void,
-  sourceAudioBitrate?: number
+  sourceAudioBitrate?: number,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const sourceAudioKbps = sourceAudioBitrate && sourceAudioBitrate > 0
-      ? Math.round(sourceAudioBitrate / 1000)
-      : 128;
+    const sourceAudioKbps =
+      sourceAudioBitrate && sourceAudioBitrate > 0
+        ? Math.round(sourceAudioBitrate / 1000)
+        : 128;
     const audioBitrateKbps = Math.max(48, Math.min(192, sourceAudioKbps));
 
     const args = [
       "-y", // Overwrite output files
-      "-i", inputPath,
-      "-c:v", "libvpx-vp9",
-      "-profile:v", "2",
-      "-pix_fmt", "yuv420p10le",
-      "-deadline", "good",
-      "-cpu-used", "3",
-      "-tile-columns", "2",
-      "-tile-rows", "1",
-      "-threads", "4",
-      "-row-mt", "1",
-      "-crf", "30",
-      "-b:v", "8M",
-      "-maxrate", "8M",
-      "-bufsize", "16M",
-      "-c:a", "libopus",
-      "-b:a", `${audioBitrateKbps}k`,
-      "-f", "webm",
+      "-i",
+      inputPath,
+      "-c:v",
+      "libvpx-vp9",
+      "-profile:v",
+      "2",
+      "-pix_fmt",
+      "yuv420p10le",
+      "-deadline",
+      "good",
+      "-cpu-used",
+      "3",
+      "-tile-columns",
+      "2",
+      "-tile-rows",
+      "1",
+      "-threads",
+      "4",
+      "-row-mt",
+      "1",
+      "-crf",
+      "30",
+      "-b:v",
+      "8M",
+      "-maxrate",
+      "8M",
+      "-bufsize",
+      "16M",
+      "-c:a",
+      "libopus",
+      "-b:a",
+      `${audioBitrateKbps}k`,
+      "-f",
+      "webm",
       outputPath,
     ];
 
@@ -150,7 +178,7 @@ export async function transcodeToWebM(
     ffmpeg.stderr.on("data", (data) => {
       const output = data.toString();
       stderr += output;
-      
+
       // Parse time=00:00:05.23 from stderr to calculate progress
       const timeMatch = output.match(/time=(\d{2}):(\d{2}):(\d{2}\.\d{2})/);
       if (timeMatch && totalDurationSecs > 0) {
@@ -158,8 +186,11 @@ export async function transcodeToWebM(
         const minutes = parseInt(timeMatch[2], 10);
         const seconds = parseFloat(timeMatch[3]);
         const currentSecs = hours * 3600 + minutes * 60 + seconds;
-        
-        const percent = Math.min(100, Math.round((currentSecs / totalDurationSecs) * 100));
+
+        const percent = Math.min(
+          100,
+          Math.round((currentSecs / totalDurationSecs) * 100),
+        );
         onProgress(percent);
       }
     });
@@ -186,27 +217,36 @@ export async function transcodeToWebM(
   });
 }
 
-
 /**
  * Extracts a single physical thumbnail frame at the very first frame (0-second mark).
  */
-export async function extractThumbnail(inputPath: string, outputPath: string): Promise<void> {
+export async function extractThumbnail(
+  inputPath: string,
+  outputPath: string,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const args = [
       "-y",
-      "-i", inputPath,
-      "-ss", "00:00:00.000",
-      "-vframes", "1",
-      "-c:v", "libwebp",
-      "-q:v", "90",
-      "-compression_level", "6",
-      "-loglevel", "error",
-      outputPath
+      "-i",
+      inputPath,
+      "-ss",
+      "00:00:00.000",
+      "-vframes",
+      "1",
+      "-c:v",
+      "libwebp",
+      "-q:v",
+      "90",
+      "-compression_level",
+      "6",
+      "-loglevel",
+      "error",
+      outputPath,
     ];
 
     const ffmpeg = spawn("ffmpeg", args);
     let stderr = "";
-    
+
     ffmpeg.stderr.on("data", (data) => {
       stderr += data.toString();
     });
@@ -215,7 +255,11 @@ export async function extractThumbnail(inputPath: string, outputPath: string): P
       if (code === 0) {
         resolve();
       } else {
-        reject(new Error(`Thumbnail extraction failed with code ${code}. Stderr: ${stderr}`));
+        reject(
+          new Error(
+            `Thumbnail extraction failed with code ${code}. Stderr: ${stderr}`,
+          ),
+        );
       }
     });
   });
