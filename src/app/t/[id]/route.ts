@@ -5,6 +5,7 @@ import fs from "node:fs";
 import { stat, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { getDataPath, resolveStoredPath } from "@/lib/paths";
 
 export async function GET(
   req: NextRequest,
@@ -21,7 +22,7 @@ export async function GET(
       return new NextResponse(null, { status: 404 });
     }
 
-    const dataPath = process.env.DATA_PATH || "/app/data";
+    const dataPath = getDataPath();
     const thumbPath = path.join(dataPath, ".thumbnails", `${id}.webp`);
 
     try {
@@ -29,15 +30,9 @@ export async function GET(
     } catch {
       // Generate a thumbnail frame on the fly if it doesn't already exist
       // Priority: processedPath, then originalPath
-      let sourcePath = video.processedPath || video.originalPath;
-      if (
-        sourcePath &&
-        sourcePath.startsWith("/app/data") &&
-        process.env.DATA_PATH &&
-        process.env.DATA_PATH !== "/app/data"
-      ) {
-        sourcePath = sourcePath.replace("/app/data", process.env.DATA_PATH);
-      }
+      const sourcePath = resolveStoredPath(
+        video.activePath || video.processedPath || video.originalPath,
+      );
 
       if (!sourcePath) return new NextResponse(null, { status: 404 });
 

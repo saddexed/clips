@@ -3,6 +3,7 @@ import { repository } from "@/lib/repository";
 import { revalidatePath } from "next/cache";
 import { rename, mkdir, unlink, stat } from "node:fs/promises";
 import path from "node:path";
+import { getDataPath, resolveStoredPath, toStoredPath } from "@/lib/paths";
 
 function normalizeTag(input: string): string {
   return input
@@ -114,7 +115,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Video not found" }, { status: 404 });
     }
 
-    const dataPath = process.env.DATA_PATH || "/app/data";
+    const dataPath = getDataPath();
     const trashedDir = path.join(dataPath, ".trashed");
     await mkdir(trashedDir, { recursive: true });
 
@@ -124,12 +125,15 @@ export async function DELETE(
       try {
         const ext = path.extname(video.processedPath);
         const physicalName = `${id}${ext}`;
-        trashedPath = path.join(trashedDir, physicalName);
+        const trashedAbsolutePath = path.join(trashedDir, physicalName);
+        trashedPath = toStoredPath(trashedAbsolutePath);
+        const sourcePath = resolveStoredPath(video.processedPath);
+        if (!sourcePath) throw new Error("Processed media path is empty");
 
         // Ensure source exists before attempting rename
-        await stat(video.processedPath);
-        await rename(video.processedPath, trashedPath);
-        console.log(`[DELETE] Moved processed file to ${trashedPath}`);
+        await stat(sourcePath);
+        await rename(sourcePath, trashedAbsolutePath);
+        console.log(`[DELETE] Moved processed file to ${trashedAbsolutePath}`);
       } catch (err: any) {
         console.error(
           `[DELETE] Failed to move file to trashed: ${err.message}`,
@@ -140,7 +144,8 @@ export async function DELETE(
     // Attempt to silently delete the original upload MP4 if it somehow survived
     if (video.originalPath) {
       try {
-        await unlink(video.originalPath);
+        const sourcePath = resolveStoredPath(video.originalPath);
+        if (sourcePath) await unlink(sourcePath);
       } catch {
         /* Suppress, usually already deleted by worker */
       }

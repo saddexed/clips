@@ -4,6 +4,7 @@ import { deleteQueueJob } from "@/lib/queue";
 import { unlink, mkdir, rename, stat } from "node:fs/promises";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
+import { getDataPath, resolveStoredPath, toStoredPath } from "@/lib/paths";
 
 export async function DELETE(
     request: NextRequest,
@@ -35,17 +36,15 @@ export async function DELETE(
                 );
 
                 // If it was still raw and in .uploads, move to trash, or just trash the process file
-                const dataPath = path.resolve(
-                    process.cwd(),
-                    process.env.DATA_PATH || "/app/data",
-                );
+                const dataPath = getDataPath();
                 const trashedDir = path.join(dataPath, ".trashed");
                 await mkdir(trashedDir, { recursive: true });
 
                 // Clean up raw upload if it exists
                 if (video.originalPath) {
                     try {
-                        await unlink(video.originalPath);
+                        const sourcePath = resolveStoredPath(video.originalPath);
+                        if (sourcePath) await unlink(sourcePath);
                     } catch {
                         /* suppress */
                     }
@@ -57,9 +56,12 @@ export async function DELETE(
                     try {
                         const ext = path.extname(video.processedPath);
                         const physicalName = `${videoId}${ext}`;
-                        trashedPath = path.join(trashedDir, physicalName);
-                        await stat(video.processedPath);
-                        await rename(video.processedPath, trashedPath);
+                        const trashedAbsolutePath = path.join(trashedDir, physicalName);
+                        trashedPath = toStoredPath(trashedAbsolutePath);
+                        const sourcePath = resolveStoredPath(video.processedPath);
+                        if (!sourcePath) throw new Error("Processed media path is empty");
+                        await stat(sourcePath);
+                        await rename(sourcePath, trashedAbsolutePath);
                     } catch {
                         /* suppress */
                     }

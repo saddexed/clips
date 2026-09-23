@@ -6,6 +6,7 @@ import { Pencil, X, Save, AlertCircle, CheckCircle, Clock, Activity, AlertTriang
 import { useRouter } from 'next/navigation';
 import SafeVideoPlayer from '@/components/SafeVideoPlayer';
 import SearchBar, { type SearchItem } from '@/components/SearchBar';
+import { mediaTypeLabel } from '@/lib/media';
 
 type Video = {
   id: string;
@@ -24,6 +25,7 @@ type Video = {
   date: Date;
   tags: { name: string }[];
   originalMetadata?: any;
+  activeMetadata?: any;
   isHidden: boolean;
 };
 
@@ -716,7 +718,7 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
               <strong>Filename:</strong> {video.filename}<br/>
               <strong>Title:</strong> {video.title}<br/>
               <strong>Status:</strong> {video.status}<br/>
-              <strong>Media Type:</strong> {video.mediaType || 'N/A'}<br/>
+              <strong>Media Type:</strong> {video.mediaType === 'IMAGE' ? 'image' : mediaTypeLabel(video.activeMetadata || video.originalMetadata)}<br/>
               <strong>Duration:</strong> {video.duration !== null ? `${video.duration}s` : 'N/A'}<br/>
               <strong>Dimensions:</strong> {video.width && video.height ? `${video.width}x${video.height}` : 'N/A'}<br/>
               <strong>Size:</strong> {getCompressionInfo(video.originalSize, video.processedSize).editStr}<br/>

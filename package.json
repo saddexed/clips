@@ -8,7 +8,10 @@
     "build": "bun --bun next build --webpack",
     "start": "bun --bun next start",
     "lint": "next lint",
-    "worker:start": "bun src/worker/index.ts"
+    "test": "bun test",
+    "worker:start": "bun src/worker/index.ts",
+    "migrate:sqlite3": "bun scripts/migrate-sqlite3.ts",
+    "delete:postgresql": "bun scripts/delete-postgresql.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",

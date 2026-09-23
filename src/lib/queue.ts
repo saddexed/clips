@@ -1,4 +1,5 @@
 import { database } from "./database";
+import { toStoredPath } from "./paths";
 
 export type VideoJobData = { videoId: string; filePath: string };
 export type QueueStatus = "wait" | "active" | "completed" | "failed";
@@ -64,15 +65,22 @@ function mapJob(row: QueueJobRow): QueueJob {
 export function enqueueVideoJob(data: VideoJobData): QueueJob {
   const id = crypto.randomUUID();
   const timestamp = now();
+  const normalizedData = { ...data, filePath: toStoredPath(data.filePath) };
   database
     .query(
       "INSERT INTO queue_jobs (id, name, video_id, payload, created_at) VALUES (?, ?, ?, ?, ?)",
     )
-    .run(id, "process-video", data.videoId, JSON.stringify(data), timestamp);
+    .run(
+      id,
+      "process-video",
+      data.videoId,
+      JSON.stringify(normalizedData),
+      timestamp,
+    );
   return {
     id,
     name: "process-video",
-    data,
+    data: normalizedData,
     progress: 0,
     status: "wait",
     failedReason: null,

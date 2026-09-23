@@ -3,6 +3,9 @@ import { repository } from "@/lib/repository";
 import fs from "node:fs";
 import { stat } from "node:fs/promises";
 import { Readable } from "node:stream";
+import path from "node:path";
+import { mediaMimeType } from "@/lib/media";
+import { resolveStoredPath } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";
 
@@ -17,21 +20,14 @@ export async function GET(
       where: { id },
     });
 
-    if (!video || !video.processedPath || video.status !== "COMPLETED") {
+    if (!video || !video.activePath || video.status !== "COMPLETED") {
       return new NextResponse("Video not found or still processing", {
         status: 404,
       });
     }
 
-    let filePath = video.processedPath;
-    if (
-      filePath &&
-      filePath.startsWith("/app/data") &&
-      process.env.DATA_PATH &&
-      process.env.DATA_PATH !== "/app/data"
-    ) {
-      filePath = filePath.replace("/app/data", process.env.DATA_PATH);
-    }
+    const filePath = resolveStoredPath(video.activePath);
+    if (!filePath) return new NextResponse("Video file missing", { status: 404 });
 
     try {
       await stat(filePath);
@@ -66,8 +62,11 @@ export async function GET(
           "Content-Range": `bytes ${start}-${end}/${size}`,
           "Accept-Ranges": "bytes",
           "Content-Length": chunksize.toString(),
-          "Content-Type":
-            video.mediaType === "IMAGE" ? "image/webp" : "video/webm",
+          "Content-Type": mediaMimeType(
+            video.activeMetadata || video.originalMetadata,
+            path.extname(filePath),
+            video.mediaType,
+          ),
         },
       });
     } else {
@@ -78,8 +77,11 @@ export async function GET(
         status: 200,
         headers: {
           "Content-Length": size.toString(),
-          "Content-Type":
-            video.mediaType === "IMAGE" ? "image/webp" : "video/webm",
+          "Content-Type": mediaMimeType(
+            video.activeMetadata || video.originalMetadata,
+            path.extname(filePath),
+            video.mediaType,
+          ),
           "Accept-Ranges": "bytes",
         },
       });

@@ -5,6 +5,7 @@ export type VideoMetadata = {
   width?: number;
   height?: number;
   format?: string;
+  container?: string;
   creation_time?: string;
   videoCodec?: string;
   audioBitrate?: number;
@@ -92,13 +93,23 @@ export async function extractMetadata(
           }
         }
 
+        const formatName =
+          typeof parsed.format?.format_name === "string"
+            ? parsed.format.format_name
+            : undefined;
+
         resolve({
           duration: parsed.format?.duration
             ? parseFloat(parsed.format.duration)
             : undefined,
           width: videoStream?.width,
           height: videoStream?.height,
-          format: parsed.format?.format_name,
+          format: formatName,
+          container: formatName
+            ?.split(",")
+            .map((name: string) => name.trim().toLowerCase())
+            .find((name: string) => name === "webm") ||
+            formatName?.split(",")[0]?.trim().toLowerCase(),
           creation_time: oldestCreationTime,
           videoCodec: videoStream?.codec_name,
           audioBitrate: Number.isFinite(parsedAudioBitrate)

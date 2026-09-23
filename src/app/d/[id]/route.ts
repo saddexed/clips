@@ -3,6 +3,9 @@ import { repository } from "@/lib/repository";
 import fs from "node:fs";
 import { stat } from "node:fs/promises";
 import { Readable } from "node:stream";
+import path from "node:path";
+import { mediaMimeType } from "@/lib/media";
+import { resolveStoredPath } from "@/lib/paths";
 
 export async function GET(
   req: NextRequest,
@@ -15,21 +18,14 @@ export async function GET(
       where: { id },
     });
 
-    if (!video || !video.processedPath || video.status !== "COMPLETED") {
+    if (!video || !video.activePath || video.status !== "COMPLETED") {
       return new NextResponse("Video not found or unavailable", {
         status: 404,
       });
     }
 
-    let filePath = video.processedPath;
-    if (
-      filePath &&
-      filePath.startsWith("/app/data") &&
-      process.env.DATA_PATH &&
-      process.env.DATA_PATH !== "/app/data"
-    ) {
-      filePath = filePath.replace("/app/data", process.env.DATA_PATH);
-    }
+    const filePath = resolveStoredPath(video.activePath);
+    if (!filePath) return new NextResponse("Video file missing on disk", { status: 404 });
 
     try {
       await stat(filePath);
@@ -46,14 +42,19 @@ export async function GET(
       /[^a-zA-Z0-9.\-_]/g,
       "_",
     );
-    const downloadFilename = safeTitle.endsWith(".webm")
+    const extension = path.extname(filePath).toLowerCase() || ".webm";
+    const downloadFilename = safeTitle.endsWith(extension)
       ? safeTitle
-      : `${safeTitle}.webm`;
+      : `${safeTitle}${extension}`;
 
     return new NextResponse(webStream as any, {
       headers: {
         "Content-Length": size.toString(),
-        "Content-Type": "application/octet-stream",
+        "Content-Type": mediaMimeType(
+          video.activeMetadata || video.originalMetadata,
+          extension,
+          video.mediaType,
+        ),
         "Content-Disposition": `attachment; filename="${downloadFilename}"`,
       },
     });
