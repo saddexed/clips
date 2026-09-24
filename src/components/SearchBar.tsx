@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, Tag, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export type SearchItem = {
   id: string;
@@ -19,6 +20,12 @@ type SearchBarProps = {
   initialTags?: string[];
   onFiltersChange?: (query: string, tags: string[]) => void;
 };
+
+const chipClass = (selected: boolean) =>
+  cn(
+    "inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-transparent px-2.5 py-1 font-mono text-xs lowercase transition-colors",
+    selected ? "bg-solid text-solid-ink hover:opacity-85" : "bg-chip text-chip-ink hover:border-line",
+  );
 
 export default function SearchBar({
   items,
@@ -159,17 +166,21 @@ export default function SearchBar({
   }, [tagToAddSignal?.seq]);
 
   return (
-    <div style={{ position: "relative", width: "100%", maxWidth: "860px" }}>
-  <div ref={shellRef} className="search-inline-shell">
-        <Search size={16} style={{ color: "var(--muted-foreground)", flexShrink: 0 }} />
+    <div className="relative w-full max-w-[860px]">
+      <div
+        ref={shellRef}
+        className="flex min-h-12 w-full flex-wrap items-center gap-2 rounded-2xl border border-line-soft bg-surface px-3.5 py-2 shadow-[0_1px_0_var(--line-soft)] transition-colors focus-within:border-line"
+      >
+        <Search size={16} className="shrink-0 text-muted" />
 
         {selectedTags.map((tag) => (
           <button
             key={tag}
             type="button"
             onClick={() => removeTag(tag)}
-            className="search-tag-chip search-tag-chip--selected"
+            className={chipClass(true)}
             title="Remove tag"
+            aria-label={`Remove tag ${tag}`}
           >
             <X size={12} />
             {tag}
@@ -192,17 +203,18 @@ export default function SearchBar({
             }
           }}
           placeholder={placeholder}
-          className="search-inline-input"
+          aria-label={placeholder}
+          className="h-8 min-w-[140px] flex-1 bg-transparent text-[0.95rem] text-ink outline-none placeholder:text-muted focus-visible:outline-none"
         />
 
         {normalizedQuery && inlineSuggestedTags.length > 0 ? (
-          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginLeft: "auto", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
             {inlineSuggestedTags.map((tag) => (
               <button
                 key={tag}
                 type="button"
                 onClick={() => addTag(tag)}
-                className="search-tag-chip"
+                className={chipClass(false)}
                 title="Add tag filter"
               >
                 <Tag size={12} />
@@ -211,7 +223,7 @@ export default function SearchBar({
             ))}
 
             {suggestedTags.length > inlineSuggestedTags.length ? (
-              <span style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", fontWeight: 600 }}>
+              <span className="font-mono text-xs text-muted">
                 +{suggestedTags.length - inlineSuggestedTags.length}
               </span>
             ) : null}
@@ -221,8 +233,7 @@ export default function SearchBar({
         {hasActiveFilters ? (
           <button
             type="button"
-            className="btn-secondary"
-            style={{ padding: "0.2rem 0.6rem", fontSize: "0.75rem", marginLeft: "0.4rem" }}
+            className="ml-1 cursor-pointer rounded-full px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:bg-chip hover:text-chip-ink"
             onClick={clearAll}
           >
             Clear

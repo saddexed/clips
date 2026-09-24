@@ -2,14 +2,25 @@
 
 import { useRef, useState, useCallback } from "react";
 import { Play, Volume2, VolumeX } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-export function VideoThumbnail({ videoId, duration, mediaType = 'VIDEO' }: { videoId: string, duration: number | null, mediaType?: 'VIDEO' | 'IMAGE' }) {
+export function VideoThumbnail({
+  videoId,
+  duration,
+  date,
+  mediaType = 'VIDEO',
+}: {
+  videoId: string;
+  duration: number | null;
+  date?: string | Date | null;
+  mediaType?: 'VIDEO' | 'IMAGE';
+}) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  
+
   const [isHovered, setIsHovered] = useState(false);
   const [videoReady, setVideoReady] = useState(false); // true once first frame is decoded
   const [isMuted, setIsMuted] = useState(true);
-  
+
   const src = `/v/${videoId}`;
   const thumbSrc = `/t/${videoId}`;
 
@@ -33,8 +44,8 @@ export function VideoThumbnail({ videoId, duration, mediaType = 'VIDEO' }: { vid
   };
 
   return (
-    <div 
-      style={{ aspectRatio: '16/9', position: 'relative', background: 'var(--secondary)', overflow: 'hidden' }}
+    <div
+      className="relative aspect-video overflow-hidden bg-surface-2"
       onMouseEnter={() => {
         hoverTimerRef.current = setTimeout(() => {
           setIsHovered(true);
@@ -55,45 +66,37 @@ export function VideoThumbnail({ videoId, duration, mediaType = 'VIDEO' }: { vid
       }}
     >
       {mediaType === 'IMAGE' ? (
-        <img 
+        <img
           src={src}
-          alt="Image Thumbnail"
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+          alt=""
+          className="absolute inset-0 size-full object-cover"
           loading="lazy"
         />
       ) : (
         <>
           {/* Thumbnail always visible underneath — prevents black flash */}
-          <img 
+          <img
             src={thumbSrc}
-            alt="Video Thumbnail"
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+            alt=""
+            className="absolute inset-0 size-full object-cover"
             loading="lazy"
           />
 
-          {/* Play button overlay — hidden once video is ready */}
-          <div style={{
-            position: 'absolute', inset: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'rgba(0,0,0,0.1)',
-            opacity: videoReady ? 0 : 1,
-            transition: 'opacity 0.3s ease',
-            pointerEvents: 'none',
-          }}>
-            <div style={{ 
-              width: '48px', height: '48px', 
-              background: 'rgba(0,0,0,0.6)', 
-              borderRadius: '50%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              backdropFilter: 'blur(4px)'
-            }}>
-              <Play size={24} color="#fafafa" fill="#fafafa" style={{ marginLeft: '4px' }} />
+          {/* Play affordance — fades out once the preview is ready */}
+          <div
+            className={cn(
+              "pointer-events-none absolute inset-0 grid place-items-center transition-opacity duration-300",
+              videoReady ? "opacity-0" : "opacity-0 group-hover:opacity-100",
+            )}
+          >
+            <div className="grid size-11 place-items-center rounded-full bg-black/45 backdrop-blur-sm">
+              <Play size={20} color="#fafafa" fill="#fafafa" className="ml-0.5" />
             </div>
           </div>
 
           {/* Video — mounted on hover, fades in only once first frame is ready */}
           {isHovered && (
-            <video 
+            <video
               ref={handleRef}
               src={src}
               muted={isMuted}
@@ -101,60 +104,53 @@ export function VideoThumbnail({ videoId, duration, mediaType = 'VIDEO' }: { vid
               loop
               playsInline
               onCanPlay={() => setVideoReady(true)}
-              style={{ 
-                position: 'absolute', inset: 0,
-                width: '100%', height: '100%', 
-                objectFit: 'cover',
-                transform: 'scale(1.05)',
-                opacity: videoReady ? 1 : 0,
-                transition: 'opacity 0.25s ease',
-                backgroundColor: 'transparent',
-                pointerEvents: 'none',
-              }}
+              className={cn(
+                "pointer-events-none absolute inset-0 size-full bg-transparent object-cover transition-opacity duration-250",
+                videoReady ? "opacity-100" : "opacity-0",
+              )}
             />
           )}
 
           {/* Mute toggle — shown only while video is playing */}
           {isHovered && videoReady && (
-            <button 
+            <button
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 setIsMuted(!isMuted);
               }}
-              style={{
-                position: 'absolute',
-                top: '0.5rem',
-                right: '0.5rem',
-                background: 'rgba(0,0,0,0.6)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '50%',
-                width: '32px',
-                height: '32px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                zIndex: 10,
-                backdropFilter: 'blur(4px)'
-              }}
+              className="absolute right-2 top-2 z-10 grid size-8 cursor-pointer place-items-center rounded-full bg-black/55 text-white backdrop-blur-sm"
               aria-label={isMuted ? "Unmute video" : "Mute video"}
             >
-              {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+              {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
             </button>
           )}
         </>
       )}
 
-      {mediaType === 'VIDEO' && duration ? (
-        <span style={{ position: 'absolute', bottom: '0.5rem', right: '0.5rem', background: 'rgba(0,0,0,0.8)', color: '#fff', fontSize: '0.75rem', padding: '0.125rem 0.375rem', borderRadius: '0.25rem', fontWeight: 500, pointerEvents: 'none', transition: 'opacity 0.2s', opacity: videoReady ? 0 : 1 }}>
-          {formatDuration(duration)}
-        </span>
-      ) : null}
+      {/* Camcorder-style stamps */}
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/45 to-transparent px-2.5 pb-2 pt-6 transition-opacity duration-200",
+          videoReady && "opacity-0",
+        )}
+      >
+        <span className="osd">{date ? formatStamp(date) : null}</span>
+        {mediaType === 'VIDEO' && duration ? (
+          <span className="osd">{formatDuration(duration)}</span>
+        ) : null}
+      </div>
     </div>
   );
+}
+
+function formatStamp(value: string | Date) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  const month = d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+  const day = d.getUTCDate().toString().padStart(2, '0');
+  return `${month} ${day} ${d.getUTCFullYear()}`;
 }
 
 function formatDuration(seconds: number) {

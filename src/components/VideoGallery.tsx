@@ -11,18 +11,11 @@ type GalleryVideo = SearchItem & {
   mediaType?: string;
 };
 
+const displayTagName = (name: string) => name.replace(/_/g, " ").replace(/\s+/g, " ").trim();
+
 export default function VideoGallery({ initialVideos }: { initialVideos: GalleryVideo[] }) {
   const [filteredVideos, setFilteredVideos] = useState<GalleryVideo[]>(initialVideos);
   const [tagToAddSignal, setTagToAddSignal] = useState<{ tag: string; seq: number } | null>(null);
-
-  const formatCardDate = useCallback((value: string | Date) => {
-    return new Date(value).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      timeZone: "UTC",
-    });
-  }, []);
 
   const searchItems = useMemo<SearchItem[]>(
     () =>
@@ -43,105 +36,83 @@ export default function VideoGallery({ initialVideos }: { initialVideos: Gallery
     [initialVideos]
   );
 
+  const isFiltered = filteredVideos.length !== initialVideos.length;
+
   return (
-    <>
-      <div style={{ marginTop: "1rem", width: "100%", display: "flex", justifyContent: "center" }}>
+    <div className="flex flex-col gap-8">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-2">
         <SearchBar
           items={searchItems}
           onResultsChange={handleResultsChange}
-          placeholder="Search titles or pick tags..."
+          placeholder="Search titles or tags"
           tagToAddSignal={tagToAddSignal}
         />
+        <p className="px-1 font-mono text-[0.6875rem] uppercase tracking-[0.08em] text-muted" aria-live="polite">
+          {isFiltered
+            ? `${filteredVideos.length} of ${initialVideos.length} clips`
+            : `${initialVideos.length} ${initialVideos.length === 1 ? "clip" : "clips"}`}
+        </p>
       </div>
 
       {filteredVideos.length === 0 ? (
-        <div className="glass-panel" style={{ padding: "4rem", textAlign: "center", borderRadius: "var(--radius)", color: "var(--muted-foreground)", marginTop: "1.2rem" }}>
-          No videos match your current filters.
+        <div className="rounded-2xl border border-dashed border-line px-6 py-16 text-center text-muted">
+          No clips match. Remove a tag or change the search.
         </div>
       ) : (
-        <div className="video-grid" style={{ marginTop: "1.2rem" }}>
+        <ul className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
           {filteredVideos.map((video) => (
-            <Link
-              key={video.id}
-              href={`/w/${video.id}`}
-              prefetch={false}
-              style={{ textDecoration: "none" }}
-            >
-              <div
-                className="glass-panel video-card-hover"
-                style={{
-                  borderRadius: "var(--radius)",
-                  overflow: "hidden",
-                  height: "100%",
-                  display: "flex",
-                  flexDirection: "column",
-                }}
+            <li key={video.id}>
+              <Link
+                href={`/w/${video.id}`}
+                prefetch={false}
+                className="group flex flex-col gap-3 rounded-2xl outline-offset-4"
               >
-                <VideoThumbnail videoId={video.id} duration={video.duration} mediaType={video.mediaType as any} />
-                <div style={{ padding: "1rem", display: "flex", flexDirection: "column", flex: 1 }}>
-                  <h3
-                    style={{
-                      fontSize: "1.125rem",
-                      fontWeight: 600,
-                      color: "var(--foreground)",
-                      marginBottom: "0.35rem",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
+                <div className="overflow-hidden rounded-xl bg-surface-2 ring-1 ring-line-soft transition duration-300 ease-out group-hover:-translate-y-0.5 group-hover:shadow-[0_12px_32px_-12px_var(--glow)] group-hover:ring-line motion-reduce:group-hover:translate-y-0">
+                  <VideoThumbnail
+                    videoId={video.id}
+                    duration={video.duration}
+                    date={video.date}
+                    mediaType={video.mediaType as any}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5 px-0.5">
+                  <h3 className="truncate text-[0.975rem] font-semibold leading-snug text-ink">
                     {video.title || video.filename}
                   </h3>
-                  <div
-                    style={{
-                      fontSize: "0.84rem",
-                      color: "var(--muted-foreground)",
-                      marginTop: "auto",
-                      paddingTop: "0.85rem",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: "0.75rem",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <span>
-                      {formatCardDate(video.date)}
-                    </span>
-
-                    <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                      {(video.tags || []).slice(0, 3).map((tag) => (
-                        (() => {
-                          const displayTag = tag.name.replace(/_/g, " ").replace(/\s+/g, " ").trim();
-                          return (
-                        <button
-                          key={`${video.id}-${tag.name}`}
-                          type="button"
-                          className="search-tag-chip"
-                          style={{ padding: "0.18rem 0.55rem", fontSize: "0.72rem" }}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setTagToAddSignal((prev) => ({
-                              tag: displayTag,
-                              seq: (prev?.seq || 0) + 1,
-                            }));
-                          }}
-                          title={`Filter by tag: ${displayTag}`}
-                        >
-                          #{displayTag}
-                        </button>
-                          );
-                        })()
-                      ))}
+                  {video.tags && video.tags.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {video.tags.slice(0, 3).map((tag) => {
+                        const displayTag = displayTagName(tag.name);
+                        return (
+                          <button
+                            key={`${video.id}-${tag.name}`}
+                            type="button"
+                            className="cursor-pointer rounded-full font-mono text-[0.6875rem] lowercase text-muted transition-colors hover:text-ink"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setTagToAddSignal((prev) => ({
+                                tag: displayTag,
+                                seq: (prev?.seq || 0) + 1,
+                              }));
+                            }}
+                            title={`Filter by tag: ${displayTag}`}
+                          >
+                            #{displayTag}
+                          </button>
+                        );
+                      })}
+                      {video.tags.length > 3 ? (
+                        <span className="font-mono text-[0.6875rem] text-muted/70">+{video.tags.length - 3}</span>
+                      ) : null}
                     </div>
-                  </div>
+                  ) : null}
                 </div>
-              </div>
-            </Link>
+              </Link>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
-    </>
+    </div>
   );
 }

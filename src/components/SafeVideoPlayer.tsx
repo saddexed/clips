@@ -25,7 +25,7 @@ export default function SafeVideoPlayer({ src }: { src: string }) {
       ref={handleRef}
       controls 
       autoPlay 
-      style={{ width: '100%', aspectRatio: '16/9', display: 'block' }}
+      className="block aspect-video w-full"
       src={src}
     />
   );
