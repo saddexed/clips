@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
 import { isAdoptableWebm, mediaTypeLabel } from "./media";
-import { resolveStoredPath, toStoredPath } from "./paths";
+import { resolveStoredPath, toStoredPath, vaultArtifactPath } from "./paths";
 import { hashBytes } from "./hash";
+import { trashArtifactPath } from "./trash";
 
 describe("upload hashes", () => {
   test("uses SHA-256 for the uploaded bytes", () => {
@@ -74,6 +75,43 @@ describe("media paths", () => {
       const absolute = path.join(configuredPath, ".uploads", "clip.webm");
       expect(toStoredPath(absolute)).toBe(".uploads/clip.webm");
       expect(resolveStoredPath(".uploads/clip.webm")).toBe(absolute);
+    } finally {
+      if (originalDataPath === undefined) delete process.env.DATA_PATH;
+      else process.env.DATA_PATH = originalDataPath;
+    }
+  });
+});
+
+describe("trash paths", () => {
+  test("keeps original and processed artifacts separate", () => {
+    const originalDataPath = process.env.DATA_PATH;
+    process.env.DATA_PATH = path.join(process.cwd(), "custom-media-data");
+    try {
+      expect(trashArtifactPath("clip", "recording.mkv", "original")).toBe(
+        path.join(process.env.DATA_PATH, ".trashed", "original", "clip.mkv"),
+      );
+      expect(trashArtifactPath("clip", "recording.mkv", "processed")).toBe(
+        path.join(process.env.DATA_PATH, ".trashed", "processed", "clip.webm"),
+      );
+      expect(trashArtifactPath("clip", "recording.mkv", "converted")).toBe(
+        path.join(process.env.DATA_PATH, ".trashed", "converted", "clip.webm"),
+      );
+    } finally {
+      if (originalDataPath === undefined) delete process.env.DATA_PATH;
+      else process.env.DATA_PATH = originalDataPath;
+    }
+  });
+
+  test("keeps active original and converted paths distinct", () => {
+    const originalDataPath = process.env.DATA_PATH;
+    process.env.DATA_PATH = path.join(process.cwd(), "custom-media-data");
+    try {
+      expect(vaultArtifactPath("clip", "recording.webm", "original")).toBe(
+        path.join(process.env.DATA_PATH, "vault", "original", "clip.webm"),
+      );
+      expect(vaultArtifactPath("clip", "recording.webm", "converted")).toBe(
+        path.join(process.env.DATA_PATH, "vault", "converted", "clip.webm"),
+      );
     } finally {
       if (originalDataPath === undefined) delete process.env.DATA_PATH;
       else process.env.DATA_PATH = originalDataPath;

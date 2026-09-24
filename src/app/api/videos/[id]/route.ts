@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { repository } from "@/lib/repository";
-import { revalidatePath } from "next/cache";
-import { rename, mkdir, unlink, stat } from "node:fs/promises";
-import path from "node:path";
-import { getDataPath, resolveStoredPath, toStoredPath } from "@/lib/paths";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { softDeleteVideo } from "@/lib/trash";
 
 function normalizeTag(input: string): string {
   return input
@@ -85,6 +83,7 @@ export async function PATCH(
 
     revalidatePath("/admin");
     revalidatePath("/");
+    revalidateTag("videos", { expire: 0 });
 
     return new NextResponse(payload, {
       status: 200,
@@ -113,93 +112,17 @@ export async function DELETE(
     if (!video) {
       return NextResponse.json({ error: "Video not found" }, { status: 404 });
     }
-
-    const dataPath = getDataPath();
-    const trashedDir = path.join(dataPath, ".trashed");
-    await mkdir(trashedDir, { recursive: true });
-
-    // Move the active vault file to .trashed when it is separate from the upload.
-    let trashedPath = null;
-    const retainedPath =
-      video.processedPath ||
-      (video.activePath !== video.originalPath ? video.activePath : null);
-    if (retainedPath) {
-      try {
-        const ext = path.extname(retainedPath);
-        const physicalName = `${id}${ext}`;
-        const trashedAbsolutePath = path.join(trashedDir, physicalName);
-        trashedPath = toStoredPath(trashedAbsolutePath);
-        const sourcePath = resolveStoredPath(retainedPath);
-        if (!sourcePath) throw new Error("Active media path is empty");
-
-        // Ensure source exists before attempting rename
-        await stat(sourcePath);
-        await rename(sourcePath, trashedAbsolutePath);
-        console.log(`[DELETE] Moved processed file to ${trashedAbsolutePath}`);
-      } catch (err: any) {
-        console.error(
-          `[DELETE] Failed to move file to trashed: ${err.message}`,
-        );
-      }
-    }
-
-    // Attempt to silently delete the original upload MP4 if it somehow survived
-    if (video.originalPath) {
-      try {
-        const sourcePath = resolveStoredPath(video.originalPath);
-        if (sourcePath) await unlink(sourcePath);
-      } catch {
-        /* Suppress, usually already deleted by worker */
-      }
-    }
-
-    // Log the event, burning the filename into the metadata before the video is erased
-    const videoName = video.title || video.filename;
-    await repository.jobHistory.create({
-      data: {
-        jobType: "DELETE",
-        status: "COMPLETED",
-        completedAt: new Date(),
-        metadata: {
-          filename: videoName,
-          originalUUID: video.id,
-          action: "Moved to .trashed",
-          trashedPath,
-        },
-      },
-    });
-
-    // Find all old jobs and burn the filename into their metadata so it persists past deletion
-    const existingJobs = await repository.jobHistory.findMany({
-      where: { videoId: id },
-    });
-    for (const job of existingJobs) {
-      if (job.jobType !== "DELETE") {
-        await repository.jobHistory.update({
-          where: { id: job.id },
-          data: {
-            metadata: {
-              ...((job.metadata as any) || {}),
-              filename: videoName,
-              originalUUID: id,
-            },
-          },
-        });
-      }
-    }
-
-    // Erase the source completely
-    await repository.video.delete({
-      where: { id },
-    });
+    await softDeleteVideo(video);
 
     revalidatePath("/admin");
     revalidatePath("/admin/history");
+    revalidatePath("/admin/settings");
     revalidatePath("/");
+    revalidateTag("videos", { expire: 0 });
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
-    console.error("Error hard-deleting video:", error);
+    console.error("Error deleting video:", error);
     return NextResponse.json(
       { error: "Failed to delete video" },
       { status: 500 },

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Upload, PlayCircle, Eye, EyeOff, Pencil, Trash2, ShieldQuestion, Image, AlertTriangle } from 'lucide-react';
+import { Upload, PlayCircle, Eye, EyeOff, Pencil, Trash2, ShieldQuestion, AlertTriangle, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 type FlatHistoryItem = {
   id: string;
@@ -16,7 +17,8 @@ type FlatHistoryItem = {
   video: { id: string; title: string; filename: string; originalMetadata: any; } | null;
 };
 
-export default function HistoryClient({ items }: { items: FlatHistoryItem[] }) {
+export default function HistoryClient({ items, page, totalPages }: { items: FlatHistoryItem[]; page: number; totalPages: number }) {
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -80,7 +82,7 @@ export default function HistoryClient({ items }: { items: FlatHistoryItem[] }) {
                   </td>
                   <td style={{ padding: '0.6rem 1rem' }}>
                     <span style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', fontFamily: 'monospace' }}>
-                      {job.videoId ? job.videoId : (job.metadata?.originalUUID ? job.metadata.originalUUID : <span style={{color: '#ef4444'}}>DELETED</span>)}
+                      {job.videoId ? job.videoId : (job.metadata?.videoId || job.metadata?.originalUUID ? (job.metadata.videoId || job.metadata.originalUUID) : <span style={{color: '#ef4444'}}>DELETED</span>)}
                     </span>
                   </td>
                   <td style={{ padding: '0.6rem 1rem' }}>
@@ -94,6 +96,11 @@ export default function HistoryClient({ items }: { items: FlatHistoryItem[] }) {
           </tbody>
         </table>
       )}
+      {totalPages > 1 && <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', padding: '1rem', alignItems: 'center' }}>
+        <button className="btn-secondary" disabled={page <= 1} onClick={() => router.push(`/admin/history?page=${page - 1}`)} title="Previous page"><ChevronLeft size={16} /></button>
+        <span>Page {page} of {totalPages}</span>
+        <button className="btn-secondary" disabled={page >= totalPages} onClick={() => router.push(`/admin/history?page=${page + 1}`)} title="Next page"><ChevronRight size={16} /></button>
+      </div>}
     </div>
   );
 }
@@ -117,6 +124,8 @@ function getActionDetails(job: FlatHistoryItem) {
       return { icon: <Trash2 size={16} />, label: 'Delete', color: '#ef4444' };
     case 'CANCELLED':
       return { icon: <AlertTriangle size={16} />, label: 'Cancelled', color: '#ef4444' };
+    case 'RESTORE':
+      return { icon: <RotateCcw size={16} />, label: 'Restore', color: '#10b981' };
     default:
       return { icon: <ShieldQuestion size={16} />, label: job.jobType, color: 'var(--foreground)' };
   }

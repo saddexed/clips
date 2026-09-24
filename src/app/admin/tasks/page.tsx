@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Activity, Clock, AlertTriangle, CheckCircle, Trash2, Loader2, PauseCircle, PlayCircle } from 'lucide-react';
+import { Activity, Clock, AlertTriangle, CheckCircle, Trash2, Loader2, PauseCircle, PlayCircle, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 
 type QueueData = {
   counts: {
@@ -12,25 +12,32 @@ type QueueData = {
     delayed: number;
   };
   recentJobs: Array<{
-    id: string;
+    id: number;
     name: string;
     progress: number;
     status: string;
     failedReason?: string;
     timestamp: number;
-    videoId?: string;
+    videoId: string;
+    title?: string | null;
+    originalSize: number;
+    processedSize: number;
   }>;
   isPaused: boolean;
+  page: number;
+  totalPages: number;
 };
 
 export default function TasksPage() {
   const [data, setData] = useState<QueueData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch('/api/queue');
+        const res = await fetch(`/api/queue?page=${page}&limit=50`, { cache: 'no-store' });
         if (res.ok) {
           setData(await res.json());
         }
@@ -42,16 +49,25 @@ export default function TasksPage() {
     };
 
     fetchData();
-    // Poll every 3 seconds for live updates
-    const intervalId = setInterval(fetchData, 3000);
+    const intervalId = setInterval(fetchData, 15000);
     return () => clearInterval(intervalId);
-  }, []);
+  }, [page]);
 
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const refresh = async () => {
+    setIsRefreshing(true);
+    try {
+      const res = await fetch(`/api/queue?page=${page}&limit=50`, { cache: 'no-store' });
+      if (res.ok) setData(await res.json());
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [isQueueActionLoading, setIsQueueActionLoading] = useState(false);
 
-  const handleDeleteJob = async (jobId: string) => {
-    if (!confirm('Are you sure you want to cancel and delete this job? If the video was not completed it will be erased.')) return;
+  const handleDeleteJob = async (jobId: number) => {
+    if (!confirm('Are you sure you want to cancel and delete this job? If the video was not completed it will be moved to Trash.')) return;
     setDeletingId(jobId);
     try {
       const res = await fetch(`/api/queue/${jobId}`, { method: 'DELETE' });
@@ -125,9 +141,9 @@ export default function TasksPage() {
             {data?.isPaused ? 'Resume Queue' : 'Pause Queue'}
           </button>
 
-          <span className={`badge ${data?.isPaused ? 'warning' : 'success'}`}>
-            Queue {data?.isPaused ? 'Paused' : 'Running'}
-          </span>
+          <button className="btn-secondary" onClick={refresh} disabled={isRefreshing} title="Refresh queue">
+            <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+          </button>
         </div>
       </div>
 
@@ -149,8 +165,7 @@ export default function TasksPage() {
             <thead>
               <tr>
                 <th>Job ID</th>
-                <th>Video ID</th>
-                <th>Type</th>
+                <th>Video</th>
                 <th>Status / Progress</th>
                 <th>Created At</th>
                 <th style={{ textAlign: 'center' }}>Actions</th>
@@ -160,8 +175,10 @@ export default function TasksPage() {
               {data.recentJobs.map((job) => (
                 <tr key={job.id}>
                   <td style={{ fontFamily: 'monospace', color: 'var(--muted-foreground)' }}>#{job.id}</td>
-                  <td style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>{job.videoId || '-'}</td>
-                  <td style={{ fontWeight: 500 }}>{job.name}</td>
+                  <td>
+                    <div style={{ fontWeight: 500 }}>{job.title || 'Deleted video'}</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>{job.videoId || '-'}</div>
+                  </td>
                   <td>
                     {job.status === 'active' ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -170,6 +187,8 @@ export default function TasksPage() {
                         </div>
                         <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>{job.progress || 0}%</span>
                       </div>
+                    ) : job.status === 'completed' ? (
+                      <span style={{ fontSize: '0.875rem' }}>{formatCompleted(job.originalSize, job.processedSize)}</span>
                     ) : job.status === 'failed' ? (
                       <div style={{ color: '#ef4444', fontSize: '0.875rem' }}>
                         Failed: {job.failedReason}
@@ -182,7 +201,7 @@ export default function TasksPage() {
                     {new Date(job.timestamp).toLocaleString()}
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <button 
+                    {job.status !== 'completed' && <button
                       onClick={() => handleDeleteJob(job.id)}
                       disabled={deletingId === job.id}
                       style={{ 
@@ -203,7 +222,7 @@ export default function TasksPage() {
                       title="Cancel / Delete Job"
                     >
                       {deletingId === job.id ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
-                    </button>
+                    </button>}
                   </td>
                 </tr>
               ))}
@@ -211,8 +230,26 @@ export default function TasksPage() {
           </table>
         )}
       </div>
+      {data && data.totalPages > 1 && <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', marginTop: '1rem', alignItems: 'center' }}>
+        <button className="btn-secondary" disabled={page <= 1} onClick={() => setPage((value) => value - 1)} title="Previous page"><ChevronLeft size={16} /></button>
+        <span>Page {page} of {data.totalPages}</span>
+        <button className="btn-secondary" disabled={page >= data.totalPages} onClick={() => setPage((value) => value + 1)} title="Next page"><ChevronRight size={16} /></button>
+      </div>}
     </div>
   );
+}
+
+function formatCompleted(original: number, processed: number) {
+  if (!processed) return 'Completed';
+  const change = original ? Math.round(((original - processed) / original) * 100) : 0;
+  return `${formatBytes(original)} -> ${formatBytes(processed)} (${change >= 0 ? `${change}% smaller` : `${Math.abs(change)}% larger`})`;
+}
+
+function formatBytes(bytes: number) {
+  if (!bytes) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const index = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  return `${Number((bytes / 1024 ** index).toFixed(2))} ${units[index]}`;
 }
 
 function StatCard({ title, value, icon }: { title: string; value: number | string; icon: React.ReactNode }) {

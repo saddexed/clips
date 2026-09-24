@@ -19,7 +19,9 @@ import { isAdoptableWebm, normalizeMediaMetadata } from "../lib/media.js";
 import {
   getDataPath,
   resolveStoredPath,
+  vaultArtifactPath,
 } from "../lib/paths.js";
+import { moveToTrash } from "../lib/trash.js";
 import sharp from "sharp";
 
 const DATA_PATH = getDataPath();
@@ -40,6 +42,14 @@ function getOldestDate(
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function assertVideoAvailable(videoId: string) {
+  const current = getVideo(videoId);
+  if (!current || current.deletedAt) {
+    throw new Error(`Video ${videoId} is no longer available`);
+  }
+  return current;
+}
+
 function hasMediaTool(command: "ffmpeg" | "ffprobe"): boolean {
   return spawnSync(command, ["-version"], { stdio: "ignore" }).status === 0;
 }
@@ -55,16 +65,17 @@ async function processVideo(job: QueueJob) {
   console.log(`[Worker] Started processing video ${videoId}`);
 
   await waitUntilQueueResumed();
-
-  updateVideo(videoId, { status: "PROCESSING" });
-
-  // We no longer pre-fetch jobHistory because it is not created until completion.
-
   const videoRecord = getVideo(videoId);
 
   if (!videoRecord) {
     throw new Error(`Video record not found for id ${videoId}`);
   }
+  if (videoRecord.deletedAt) {
+    throw new Error(`Video ${videoId} is in trash`);
+  }
+  updateVideo(videoId, { status: "PROCESSING" });
+
+  // We no longer pre-fetch jobHistory because it is not created until completion.
 
   const filename = videoRecord.filename;
   const storedSourcePath = videoRecord.originalPath || job.data.filePath;
@@ -125,25 +136,38 @@ async function processVideo(job: QueueJob) {
       const webpStats = await stat(outputPath);
       const vaultDir = path.join(DATA_PATH, "vault");
       await mkdir(vaultDir, { recursive: true });
+      const finalWebpPath = vaultArtifactPath(videoId, filename, "converted", "IMAGE");
 
       let finalPath: string;
       let finalSize: number;
 
-      if (webpStats.size > originalStats.size) {
+      assertVideoAvailable(videoId);
+      if (webpStats.size >= originalStats.size) {
         console.log(
-          `[Worker] Image ${videoId} WebP was larger (${webpStats.size} > ${originalStats.size}), keeping original`,
+          `[Worker] Image ${videoId} WebP was not smaller (${webpStats.size} >= ${originalStats.size}), keeping original`,
         );
         await unlink(outputPath);
-        finalPath = path.join(vaultDir, `${videoId}${path.extname(filename)}`);
-        await rename(filePath, finalPath);
+        await unlink(finalWebpPath).catch(() => {});
+        finalPath = filePath;
         finalSize = originalStats.size;
       } else {
         console.log(
           `[Worker] Image ${videoId} compressed (${originalStats.size} -> ${webpStats.size})`,
         );
-        finalPath = path.join(vaultDir, `${videoId}.webp`);
+        finalPath = finalWebpPath;
+        await mkdir(path.dirname(finalPath), { recursive: true });
         await rename(outputPath, finalPath);
         finalSize = webpStats.size;
+        await moveToTrash(filePath, videoId, filename, "original").catch(() => {});
+        await unlink(path.join(DATA_PATH, ".thumbnails", `${videoId}.webp`)).catch(() => {});
+      }
+
+      const currentImage = getVideo(videoId);
+      if (!currentImage || currentImage.deletedAt) {
+        if (finalPath !== filePath) {
+          await moveToTrash(finalPath, videoId, filename, "converted").catch(() => {});
+        }
+        throw new Error(`Video ${videoId} was moved to Trash during processing`);
       }
 
       updateQueueProgress(job.id, 100);
@@ -202,9 +226,9 @@ async function processVideo(job: QueueJob) {
       });
 
       if (isAdoptableWebm(metadata.raw)) {
-        const vaultDir = path.join(DATA_PATH, "vault");
-        await mkdir(vaultDir, { recursive: true });
-        const finalPath = path.join(vaultDir, `${videoId}.webm`);
+        assertVideoAvailable(videoId);
+        const finalPath = vaultArtifactPath(videoId, filename, "original", "VIDEO");
+        await mkdir(path.dirname(finalPath), { recursive: true });
         if (path.resolve(filePath) !== path.resolve(finalPath)) {
           await rename(filePath, finalPath);
         }
@@ -302,30 +326,40 @@ async function processVideo(job: QueueJob) {
       }
 
       // 4. Move to Vault
-      console.log(`[Worker] Moving files to vault for ${videoId}`);
-      const vaultDir = path.join(DATA_PATH, "vault");
-      await mkdir(vaultDir, { recursive: true });
+      console.log(`[Worker] Publishing converted file for ${videoId}`);
+      const convertedDir = path.join(DATA_PATH, "vault", "converted");
+      await mkdir(convertedDir, { recursive: true });
 
-      const finalWebmPath = path.join(vaultDir, `${videoId}.webm`);
+      const finalWebmPath = vaultArtifactPath(videoId, filename, "converted", "VIDEO");
 
       const transcodedStats = await stat(outputPath);
       let finalPath: string;
       let finalSize: number;
       let processedSize = 0;
 
-      if (transcodedStats.size > originalStats.size) {
-        finalPath = path.join(vaultDir, `${videoId}${path.extname(filename)}`);
+      assertVideoAvailable(videoId);
+      if (transcodedStats.size >= originalStats.size) {
         finalSize = originalStats.size;
 
         await unlink(outputPath).catch(() => {});
-        await unlink(finalPath).catch(() => {});
-        await rename(filePath, finalPath);
+        await unlink(finalWebmPath).catch(() => {});
+        finalPath = filePath;
       } else {
         await unlink(finalWebmPath).catch(() => {});
         await rename(outputPath, finalWebmPath);
         finalPath = finalWebmPath;
         processedSize = transcodedStats.size;
         finalSize = processedSize;
+        await moveToTrash(filePath, videoId, filename, "original").catch(() => {});
+        await unlink(path.join(DATA_PATH, ".thumbnails", `${videoId}.webp`)).catch(() => {});
+      }
+
+      const currentVideo = getVideo(videoId);
+      if (!currentVideo || currentVideo.deletedAt) {
+        if (finalPath !== filePath) {
+          await moveToTrash(finalPath, videoId, filename, "converted").catch(() => {});
+        }
+        throw new Error(`Video ${videoId} was moved to Trash during processing`);
       }
 
       // 5. Final DB Updates
@@ -352,7 +386,12 @@ async function processVideo(job: QueueJob) {
   } catch (error) {
     console.error(`[Worker] Error processing video ${videoId}:`, error);
 
-    updateVideo(videoId, { status: "FAILED" });
+    // A cancelled job may finish ffmpeg after its source was moved to Trash.
+    // Never leave an unpublished conversion behind for a later run to adopt.
+    await unlink(path.join(DATA_PATH, "processed", `${videoId}.webm`)).catch(() => {});
+    await unlink(path.join(DATA_PATH, "processed", `${videoId}.webp`)).catch(() => {});
+
+    if (!getVideo(videoId)?.deletedAt) updateVideo(videoId, { status: "FAILED" });
 
     createJobHistory({
       videoId,

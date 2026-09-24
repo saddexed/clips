@@ -15,7 +15,6 @@ const getVideos = unstable_cache(
   async () => {
     const videos = await repository.video.findMany({
       where: {
-        status: "COMPLETED",
         deletedAt: null,
         isHidden: false,
       },

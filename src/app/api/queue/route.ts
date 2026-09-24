@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { getQueueStats, setQueuePaused } from "../../../lib/queue";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    return NextResponse.json(getQueueStats());
+    const url = new URL(request.url);
+    return NextResponse.json(getQueueStats({
+      page: Number(url.searchParams.get("page") || 1),
+      limit: Number(url.searchParams.get("limit") || 50),
+    }));
   } catch (error) {
     console.error("Queue API Error:", error);
     return NextResponse.json(

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useOptimistic, useTransition, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Pencil, X, Save, AlertCircle, CheckCircle, Clock, Activity, AlertTriangle, Eye, EyeOff, Trash2, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react';
+import { Pencil, X, Save, AlertCircle, CheckCircle, Clock, Activity, AlertTriangle, Eye, EyeOff, Trash2, ArrowUpDown, ChevronUp, ChevronDown, History as HistoryIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import SafeVideoPlayer from '@/components/SafeVideoPlayer';
 import SearchBar, { type SearchItem } from '@/components/SearchBar';
@@ -13,6 +13,7 @@ type Video = {
   filename: string;
   title: string;
   status: string;
+  activePath?: string;
   mediaType?: string;
   duration: number | null;
   width: number | null;
@@ -28,7 +29,7 @@ type Video = {
   isHidden: boolean;
 };
 
-export default function VideoTable({ initialVideos }: { initialVideos: Video[] }) {
+export default function VideoTable({ initialVideos, page, totalPages, initialQuery = '', initialTags = [] }: { initialVideos: Video[]; page: number; totalPages: number; initialQuery?: string; initialTags?: string[] }) {
   const router = useRouter();
   // We use useMemo to force a re-render when initialVideos identity changes deeply
   // NextJS router.refresh() updates Server Component props, but React might hold old state
@@ -117,6 +118,15 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
     setFilteredIds(new Set(items.map((item) => item.id)));
   }, []);
 
+  const handleFiltersChange = useCallback((query: string, tags: string[]) => {
+    const params = new URLSearchParams(window.location.search);
+    if (query.trim()) params.set('q', query.trim()); else params.delete('q');
+    if (tags.length) params.set('tag', tags.join(',')); else params.delete('tag');
+    params.delete('page');
+    const nextUrl = `/admin${params.toString() ? `?${params.toString()}` : ''}`;
+    if (`${window.location.pathname}${window.location.search}` !== nextUrl) router.replace(nextUrl);
+  }, [router]);
+
   const handleEditComplete = (updatedVideo: Video) => {
     setLocalVideos(localVideos.map(v => v.id === updatedVideo.id ? updatedVideo : v));
     setEditingVideo(null);
@@ -158,6 +168,9 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
           onResultsChange={handleSearchResultsChange}
           placeholder="Filter table by title or tags..."
           tagToAddSignal={tagToAddSignal}
+          initialQuery={initialQuery}
+          initialTags={initialTags}
+          onFiltersChange={handleFiltersChange}
         />
       </div>
 
@@ -295,6 +308,11 @@ export default function VideoTable({ initialVideos }: { initialVideos: Video[] }
           </table>
         )}
       </div>
+      {totalPages > 1 && <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', marginTop: '1rem', alignItems: 'center' }}>
+        <button className="btn-secondary" disabled={page <= 1} onClick={() => router.push(`/admin?page=${page - 1}${initialQuery ? `&q=${encodeURIComponent(initialQuery)}` : ''}${initialTags.length ? `&tag=${encodeURIComponent(initialTags.join(','))}` : ''}`)} title="Previous page"><ChevronUp size={16} style={{ transform: 'rotate(-90deg)' }} /></button>
+        <span>Page {page} of {totalPages}</span>
+        <button className="btn-secondary" disabled={page >= totalPages} onClick={() => router.push(`/admin?page=${page + 1}${initialQuery ? `&q=${encodeURIComponent(initialQuery)}` : ''}${initialTags.length ? `&tag=${encodeURIComponent(initialTags.join(','))}` : ''}`)} title="Next page"><ChevronDown size={16} style={{ transform: 'rotate(-90deg)' }} /></button>
+      </div>}
 
       {editingVideo && (
         <EditVideoModal 
@@ -323,7 +341,8 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
   );
   const [tagQuery, setTagQuery] = useState('');
   
-  const [activeTab, setActiveTab] = useState<'edit' | 'metadata'>('edit');
+  const [activeTab, setActiveTab] = useState<'edit' | 'metadata' | 'history'>('edit');
+  const [history, setHistory] = useState<any[]>([]);
   
   // Infer active mode from the value of video.date
   const activeParsedDate = new Date(video.date || video.createdAt).getTime();
@@ -378,6 +397,14 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'history') return;
+    fetch(`/api/history?videoId=${encodeURIComponent(video.id)}`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error('Failed to load history')))
+      .then((payload) => setHistory(payload.items || []))
+      .catch(() => setHistory([]));
+  }, [activeTab, video.id]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -506,13 +533,25 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
           >
             Metadata
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('history')}
+            style={{
+              padding: '0.75rem 1.5rem', background: 'transparent', border: 'none',
+              borderBottom: activeTab === 'history' ? '2px solid var(--foreground)' : '2px solid transparent',
+              color: activeTab === 'history' ? 'var(--foreground)' : 'var(--muted-foreground)',
+              fontWeight: activeTab === 'history' ? 600 : 400, cursor: 'pointer', transition: 'all 0.2s'
+            }}
+          >
+            <HistoryIcon size={15} style={{ verticalAlign: 'middle', marginRight: '0.35rem' }} />History
+          </button>
         </div>
 
         {activeTab === 'edit' && (
           <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', marginBottom: '2rem' }}>
             {/* Left Column: Player & Metadata */}
             <div style={{ flex: '2 1 500px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {video.status === 'COMPLETED' ? (
+              {video.activePath ? (
                 video.mediaType === 'IMAGE' ? (
                   <div style={{ width: '100%', background: '#000', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                     <img 
@@ -701,19 +740,11 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
           <div style={{ marginBottom: '2rem' }}>
             <div style={{ background: 'var(--secondary)', padding: '1.5rem', borderRadius: 'var(--radius)', overflowX: 'auto', maxHeight: '600px', fontSize: '0.875rem', lineHeight: '1.8', wordBreak: 'break-all' }}>
               <strong>ID:</strong> {video.id}<br/>
-              <strong>Original Filename:</strong> {video.originalMetadata?.filename || video.filename}<br/>
-              <strong>Filename:</strong> {video.filename}<br/>
-              <strong>Title:</strong> {video.title}<br/>
-              <strong>Status:</strong> {video.status}<br/>
-              <strong>Media Type:</strong> {video.mediaType === 'IMAGE' ? 'image' : mediaTypeLabel(video.activeMetadata || video.originalMetadata)}<br/>
+              <strong>Type:</strong> {video.mediaType === 'IMAGE' ? 'image' : mediaTypeLabel(video.activeMetadata || video.originalMetadata)}<br/>
               <strong>Duration:</strong> {video.duration !== null ? `${video.duration}s` : 'N/A'}<br/>
               <strong>Dimensions:</strong> {video.width && video.height ? `${video.width}x${video.height}` : 'N/A'}<br/>
               <strong>Size:</strong> {getCompressionInfo(video.originalSize, video.processedSize).editStr}<br/>
-              <strong>Uploaded At:</strong> {new Date(video.uploadedAt).toLocaleString()}<br/>
-              <strong>Recorded At:</strong> {new Date(video.createdAt).toLocaleString()}<br/>
-              {(video as any).updatedAt && (
-                <><strong>Updated At:</strong> {new Date((video as any).updatedAt).toLocaleString()}<br/></>
-              )}
+              <strong>Date:</strong> {new Date(video.createdAt).toLocaleString()}<br/>
             </div>
             
             {video.originalMetadata && (
@@ -722,6 +753,35 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
                 <pre style={{ color: '#d4d4d8', fontSize: '0.875rem', fontFamily: 'var(--font-mono)' }}>
                   {JSON.stringify(video.originalMetadata, (key, value) => typeof value === 'bigint' ? value.toString() : value, 2)}
                 </pre>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'history' && (
+          <div style={{ marginBottom: '2rem' }}>
+            {history.length === 0 ? <p style={{ color: 'var(--muted-foreground)' }}>No history available.</p> : (
+              <div style={{ overflowX: 'auto' }}>
+                <table className="data-table" style={{ width: '100%', minWidth: '480px', tableLayout: 'fixed' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '38%', textAlign: 'left' }}>Action</th>
+                      <th style={{ width: '22%', textAlign: 'left' }}>Status</th>
+                      <th style={{ width: '40%', textAlign: 'left' }}>Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((event) => (
+                      <tr key={event.id}>
+                        <td style={{ padding: '0.65rem 1rem', textAlign: 'left' }}>{event.jobType}</td>
+                        <td style={{ padding: '0.65rem 1rem', textAlign: 'left', color: 'var(--muted-foreground)' }}>{event.status}</td>
+                        <td style={{ padding: '0.65rem 1rem', textAlign: 'left', color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>
+                          {new Date(event.completedAt || event.startedAt).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

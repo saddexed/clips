@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { normalizeMediaMetadata } from "./media";
-import { resolveStoredPath, toStoredPath } from "./paths";
+import { resolveStoredPath, toStoredPath, vaultArtifactPath } from "./paths";
 
 export type MediaType = "VIDEO" | "IMAGE";
 export type VideoStatus = "UPLOADING" | "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
@@ -128,15 +128,46 @@ CREATE TABLE IF NOT EXISTS job_history (
   error_message TEXT, metadata TEXT
 );
 CREATE TABLE IF NOT EXISTS queue_jobs (
-  id TEXT PRIMARY KEY, name TEXT NOT NULL, video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
   payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'wait', progress INTEGER NOT NULL DEFAULT 0,
   attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3, failed_reason TEXT,
   created_at TEXT NOT NULL, started_at TEXT, completed_at TEXT, lease_expires_at TEXT
+);
+CREATE TABLE IF NOT EXISTS trash_items (
+  video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  artifact_kind TEXT NOT NULL CHECK (artifact_kind IN ('original', 'converted')),
+  deleted_at TEXT NOT NULL,
+  PRIMARY KEY (video_id, artifact_kind)
 );
 `);
 
 function columns(table: string) {
   return new Set(database.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all().map((row) => row.name));
+}
+
+function migrateQueueJobIds() {
+  const idColumn = database.query<{ name: string; type: string }, []>("PRAGMA table_info(queue_jobs)").all().find((column) => column.name === "id");
+  const tableSql = database.query<{ sql: string | null }, []>("SELECT sql FROM sqlite_master WHERE type='table' AND name='queue_jobs'").get()?.sql || "";
+  if (idColumn?.type.toUpperCase() === "INTEGER" && /AUTOINCREMENT/i.test(tableSql)) return;
+
+  const preserveIds = idColumn?.type.toUpperCase() === "INTEGER";
+  database.transaction(() => {
+    database.exec(`
+DROP INDEX IF EXISTS queue_jobs_status_created_idx;
+ALTER TABLE queue_jobs RENAME TO queue_jobs_legacy;
+CREATE TABLE queue_jobs_serial (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'wait', progress INTEGER NOT NULL DEFAULT 0,
+  attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3, failed_reason TEXT,
+  created_at TEXT NOT NULL, started_at TEXT, completed_at TEXT, lease_expires_at TEXT
+);
+`);
+    const id = preserveIds ? "id," : "";
+    database.exec(`INSERT INTO queue_jobs_serial (${id}name,video_id,payload,status,progress,attempts,max_attempts,failed_reason,created_at,started_at,completed_at,lease_expires_at)
+SELECT ${id}name,video_id,payload,status,progress,attempts,max_attempts,failed_reason,created_at,started_at,completed_at,lease_expires_at
+FROM queue_jobs_legacy ORDER BY created_at ASC, rowid ASC;`);
+    database.exec("DROP TABLE queue_jobs_legacy; ALTER TABLE queue_jobs_serial RENAME TO queue_jobs;");
+  })();
 }
 
 function createVideos() {
@@ -193,12 +224,14 @@ if (videoColumns.has("original_path")) {
 } else {
   createVideos();
 }
+migrateQueueJobIds();
 removeLegacyArtifactsTable();
 database.exec(`
 CREATE TABLE IF NOT EXISTS video_tags (video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE, tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE, PRIMARY KEY(video_id, tag_id));
 CREATE INDEX IF NOT EXISTS job_history_video_id_idx ON job_history(video_id);
 CREATE INDEX IF NOT EXISTS job_history_status_idx ON job_history(status);
 CREATE INDEX IF NOT EXISTS queue_jobs_status_created_idx ON queue_jobs(status, created_at);
+CREATE INDEX IF NOT EXISTS trash_items_deleted_at_idx ON trash_items(deleted_at);
 `);
 
 function tagsFor(videoId: string) {
@@ -220,22 +253,31 @@ function pathExists(value: string) {
 function mediaPaths(id: string, name: string, mediaType: MediaType) {
   const originalExtension = extension(name) || ".webm";
   const uploadPath = storedPath(".uploads", id, originalExtension);
-  const vaultOriginalPath = storedPath("vault", id, originalExtension);
-  const processedPath = storedPath("vault", id, mediaType === "IMAGE" ? ".webp" : ".webm");
-  const originalPath = pathExists(uploadPath)
+  const canonicalOriginalPath = toStoredPath(vaultArtifactPath(id, name, "original", mediaType));
+  const canonicalConvertedPath = toStoredPath(vaultArtifactPath(id, name, "converted", mediaType));
+  const legacyVaultOriginalPath = storedPath("vault", id, originalExtension);
+  const legacyProcessedPath = storedPath("processed", id, mediaType === "IMAGE" ? ".webp" : ".webm");
+  const legacyVaultConvertedPath = storedPath("vault", id, mediaType === "IMAGE" ? ".webp" : ".webm");
+  const originalPath = pathExists(canonicalOriginalPath)
+    ? canonicalOriginalPath
+    : pathExists(uploadPath)
     ? uploadPath
-    : pathExists(vaultOriginalPath)
-      ? vaultOriginalPath
+    : pathExists(legacyVaultOriginalPath)
+      ? legacyVaultOriginalPath
       : uploadPath;
-  const hasProcessed = pathExists(processedPath) && processedPath !== originalPath;
+  const processedPath = [canonicalConvertedPath, legacyVaultConvertedPath, legacyProcessedPath]
+    .find((candidate) => pathExists(candidate) && candidate !== originalPath) || null;
+  const activePath = processedPath || (
+    pathExists(canonicalOriginalPath)
+      ? canonicalOriginalPath
+      : pathExists(legacyVaultOriginalPath)
+        ? legacyVaultOriginalPath
+        : originalPath
+  );
   return {
     originalPath,
-    processedPath: hasProcessed ? processedPath : null,
-    activePath: hasProcessed
-      ? processedPath
-      : pathExists(vaultOriginalPath)
-        ? vaultOriginalPath
-        : originalPath,
+    processedPath,
+    activePath,
   };
 }
 function mapVideo(row: VideoRow, tags: Tag[]): Video {
@@ -254,8 +296,26 @@ function mapVideo(row: VideoRow, tags: Tag[]): Video {
   return { id: row.id, title: row.title, status: row.status, size: Number(row.size), sha256Hash: row.sha256_hash, metadata, createdAt: new Date(row.created_at), uploadedAt: new Date(row.uploaded_at), deletedAt: row.deleted_at ? new Date(row.deleted_at) : null, isHidden: Boolean(row.is_hidden), tags, filename: name, description: "", mediaType, originalPath: paths.originalPath, processedPath: paths.processedPath, activePath: paths.activePath, originalMetadata: metadata, activeMetadata, originalSize: Number(metadata?.size || 0), processedSize: paths.processedPath ? Number(row.size) : 0, activeSize: Number(row.size), duration: typeof metadata?.duration === "number" ? metadata.duration : null, width, height, date: new Date(row.created_at), updatedAt: new Date(row.created_at) };
 }
 export function getVideo(id: string, withTags = true) { const row = database.query<VideoRow, [string]>("SELECT * FROM videos WHERE id=?").get(id); return row ? mapVideo(row, withTags ? tagsFor(id) : []) : null; }
+export function listDeletedVideos() {
+  return database.query<VideoRow, []>("SELECT * FROM videos WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC").all().map((row) => mapVideo(row, tagsFor(row.id)));
+}
 export function findVideoIdByOriginalSha256(hash: string) { return database.query<{ id: string }, [string]>("SELECT id FROM videos WHERE sha256_hash=?").get(hash)?.id || null; }
-export function listVideos(options: { publicOnly?: boolean; limit?: number } = {}) { const filters = ["deleted_at IS NULL"]; if (options.publicOnly) filters.push("status='COMPLETED'", "is_hidden=0"); const limit = options.limit ? ` LIMIT ${Math.max(1, Math.floor(options.limit))}` : ""; return database.query<VideoRow, []>(`SELECT * FROM videos WHERE ${filters.join(" AND ")} ORDER BY ${options.publicOnly ? "created_at" : "uploaded_at"} DESC${limit}`).all().map((row) => mapVideo(row, tagsFor(row.id))); }
+export function listVideos(options: { publicOnly?: boolean; limit?: number } = {}) { const filters = ["deleted_at IS NULL"]; if (options.publicOnly) filters.push("is_hidden=0"); const limit = options.limit ? ` LIMIT ${Math.max(1, Math.floor(options.limit))}` : ""; return database.query<VideoRow, []>(`SELECT * FROM videos WHERE ${filters.join(" AND ")} ORDER BY ${options.publicOnly ? "created_at" : "uploaded_at"} DESC${limit}`).all().map((row) => mapVideo(row, tagsFor(row.id))); }
+export function listVideosPage(options: { page?: number; limit?: number; query?: string; tags?: string[] } = {}) {
+  const limit = Math.min(50, Math.max(1, Math.floor(options.limit || 50)));
+  const page = Math.max(1, Math.floor(options.page || 1));
+  const query = (options.query || "").trim();
+  const like = `%${query}%`;
+  const tags = (options.tags || []).map((tag) => tag.trim().toLowerCase()).filter(Boolean);
+  const conditions = ["v.deleted_at IS NULL"];
+  const params: (string | number)[] = [];
+  if (query) { conditions.push("(v.title LIKE ? COLLATE NOCASE OR json_extract(v.metadata,'$.filename') LIKE ? COLLATE NOCASE OR t.name LIKE ? COLLATE NOCASE)"); params.push(like, like, like); }
+  for (const tag of tags) { conditions.push("EXISTS (SELECT 1 FROM video_tags selected_vt JOIN tags selected_t ON selected_t.id=selected_vt.tag_id WHERE selected_vt.video_id=v.id AND selected_t.deleted_at IS NULL AND selected_t.name = ?)"); params.push(tag); }
+  const where = conditions.join(" AND ");
+  const total = Number(database.query<{ count: number }, any[]>(`SELECT COUNT(DISTINCT v.id) count FROM videos v LEFT JOIN video_tags vt ON vt.video_id=v.id LEFT JOIN tags t ON t.id=vt.tag_id WHERE ${where}`).get(...params)?.count || 0);
+  const rows = database.query<VideoRow, (string | number)[]>(`SELECT DISTINCT v.* FROM videos v LEFT JOIN video_tags vt ON vt.video_id=v.id LEFT JOIN tags t ON t.id=vt.tag_id WHERE ${where} ORDER BY v.uploaded_at DESC LIMIT ? OFFSET ?`).all(...params, limit, (page - 1) * limit);
+  return { items: rows.map((row) => mapVideo(row, tagsFor(row.id))), page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) };
+}
 
 type VideoInput = { id: string; title: string; status: VideoStatus; size?: number; sha256Hash?: string | null; originalSha256?: string | null; metadata?: Record<string, unknown> | null; originalMetadata?: Record<string, unknown> | null; activeSize?: number; filename?: string; originalSize?: number; createdAt: Date; uploadedAt: Date; deletedAt?: Date | null; isHidden: boolean; tags?: string[] };
 export function createVideo(input: VideoInput) {
@@ -273,14 +333,37 @@ export function updateVideo(id: string, updates: Omit<Partial<Video>, "tags"> & 
   if (updates.tags) replaceTags(id, updates.tags);
   return getVideo(id);
 }
+export type TrashArtifactKind = "original" | "converted";
+export type TrashArtifactRow = { videoId: string; artifactKind: TrashArtifactKind; deletedAt: Date; filename: string; title: string; missing: boolean };
+export function recordTrashArtifact(videoId: string, artifactKind: TrashArtifactKind, deletedAt = new Date()) {
+  database.query("INSERT INTO trash_items(video_id,artifact_kind,deleted_at) VALUES(?,?,?) ON CONFLICT(video_id,artifact_kind) DO UPDATE SET deleted_at=excluded.deleted_at").run(videoId, artifactKind, deletedAt.toISOString());
+}
+export function removeTrashArtifact(videoId: string, artifactKind: TrashArtifactKind) { database.query("DELETE FROM trash_items WHERE video_id=? AND artifact_kind=?").run(videoId, artifactKind); }
+export function trashArtifactsForVideo(videoId: string) { return database.query<{ artifact_kind: TrashArtifactKind; deleted_at: string }, [string]>("SELECT artifact_kind,deleted_at FROM trash_items WHERE video_id=? ORDER BY deleted_at DESC").all(videoId); }
+export function allTrashArtifacts() { return database.query<{ video_id: string; artifact_kind: TrashArtifactKind; deleted_at: string }, []>("SELECT video_id,artifact_kind,deleted_at FROM trash_items ORDER BY deleted_at DESC").all(); }
+export function listTrashArtifactRows(page = 1, limit = 50) {
+  const safeLimit = Math.min(50, Math.max(1, Math.floor(limit)));
+  const safePage = Math.max(1, Math.floor(page));
+  const total = Number(database.query<{ count: number }, []>("SELECT COUNT(*) count FROM trash_items").get()?.count || 0);
+  const rows = database.query<{ video_id: string; artifact_kind: TrashArtifactKind; deleted_at: string; title: string; metadata: string | null }, [number, number]>("SELECT t.video_id,t.artifact_kind,t.deleted_at,v.title,v.metadata FROM trash_items t JOIN videos v ON v.id=t.video_id ORDER BY t.deleted_at DESC LIMIT ? OFFSET ?").all(safeLimit, (safePage - 1) * safeLimit);
+  return { items: rows.map((row) => ({ videoId: row.video_id, artifactKind: row.artifact_kind, deletedAt: new Date(row.deleted_at), filename: filename(decodeJson(row.metadata), row.video_id), title: row.title, missing: false })), page: safePage, limit: safeLimit, total, totalPages: Math.max(1, Math.ceil(total / safeLimit)) };
+}
+export function countTrashArtifacts(videoId: string) { return Number(database.query<{ count: number }, [string]>("SELECT COUNT(*) count FROM trash_items WHERE video_id=?").get(videoId)?.count || 0); }
 export function deleteVideo(id: string) { database.query("DELETE FROM videos WHERE id=?").run(id); }
 
 function historyMap(row: HistoryRow): JobHistory { return { id: row.id, videoId: row.video_id, jobType: row.job_type, status: row.status, startedAt: new Date(row.started_at), completedAt: row.completed_at ? new Date(row.completed_at) : null, originalSize: Number(row.original_size), processedSize: Number(row.processed_size), errorMessage: row.error_message, metadata: decodeJson(row.metadata), video: row.video_id && row.video_title !== null ? { id: row.video_id, title: row.video_title, filename: row.video_filename || row.video_id, originalMetadata: decodeJson(row.video_original_metadata) } : null }; }
 export function createJobHistory(input: Omit<JobHistory, "id" | "startedAt" | "video"> & { id?: string; startedAt?: Date }) { const id = input.id || crypto.randomUUID(); database.query("INSERT INTO job_history(id,video_id,job_type,status,started_at,completed_at,original_size,processed_size,error_message,metadata) VALUES(?,?,?,?,?,?,?,?,?,?)").run(id, input.videoId, input.jobType, input.status, (input.startedAt || new Date()).toISOString(), input.completedAt?.toISOString() || null, input.originalSize, input.processedSize, input.errorMessage, encodeJson(input.metadata)); return id; }
-export function listJobHistory(limit = 100) { return database.query<HistoryRow, [number]>("SELECT j.*,v.title video_title,json_extract(v.metadata,'$.filename') video_filename,v.metadata video_original_metadata FROM job_history j LEFT JOIN videos v ON v.id=j.video_id ORDER BY j.started_at DESC LIMIT ?").all(limit).map(historyMap); }
+export function listJobHistory(limit = 100) { return database.query<HistoryRow, [number]>("SELECT j.*,v.title video_title,json_extract(v.metadata,'$.filename') video_filename,v.metadata video_original_metadata FROM job_history j LEFT JOIN videos v ON v.id=j.video_id WHERE j.job_type <> 'TRANSCODE' ORDER BY j.started_at DESC LIMIT ?").all(limit).map(historyMap); }
+export function listJobHistoryPage(page = 1, limit = 50) {
+  const safeLimit = Math.min(50, Math.max(1, Math.floor(limit)));
+  const safePage = Math.max(1, Math.floor(page));
+  const total = Number(database.query<{ count: number }, []>("SELECT COUNT(*) count FROM job_history WHERE job_type <> 'TRANSCODE'").get()?.count || 0);
+  const items = database.query<HistoryRow, [number, number]>("SELECT j.*,v.title video_title,json_extract(v.metadata,'$.filename') video_filename,v.metadata video_original_metadata FROM job_history j LEFT JOIN videos v ON v.id=j.video_id WHERE j.job_type <> 'TRANSCODE' ORDER BY j.started_at DESC LIMIT ? OFFSET ?").all(safeLimit, (safePage - 1) * safeLimit).map(historyMap);
+  return { items, page: safePage, limit: safeLimit, total, totalPages: Math.max(1, Math.ceil(total / safeLimit)) };
+}
 export function jobHistoryForVideo(videoId: string) { return database.query<HistoryRow, [string]>("SELECT j.*,v.title video_title,json_extract(v.metadata,'$.filename') video_filename,v.metadata video_original_metadata FROM job_history j LEFT JOIN videos v ON v.id=j.video_id WHERE j.video_id=? ORDER BY j.started_at").all(videoId).map(historyMap); }
 export function updateJobHistory(id: string, metadata: Record<string, unknown>) { database.query("UPDATE job_history SET metadata=? WHERE id=?").run(JSON.stringify(metadata), id); }
-export function search(q: string, isAdmin: boolean) { const like = `%${q}%`; const tags = database.query<Pick<Tag, "name">, [string]>("SELECT name FROM tags WHERE deleted_at IS NULL AND name LIKE ? COLLATE NOCASE ORDER BY name LIMIT 12").all(like); const visibility = isAdmin ? "" : " AND v.status='COMPLETED' AND v.is_hidden=0"; const rows = database.query<{ id: string; title: string; metadata: string }, [string, string, string]>(`SELECT DISTINCT v.id,v.title,v.metadata FROM videos v LEFT JOIN video_tags vt ON vt.video_id=v.id LEFT JOIN tags t ON t.id=vt.tag_id WHERE v.deleted_at IS NULL${visibility} AND (v.title LIKE ? COLLATE NOCASE OR json_extract(v.metadata,'$.filename') LIKE ? COLLATE NOCASE OR t.name LIKE ? COLLATE NOCASE) ORDER BY v.created_at DESC LIMIT 20`).all(like, like, like); return { tags, videos: rows.map((row) => ({ id: row.id, title: row.title, filename: filename(decodeJson(row.metadata), row.id) })) }; }
+export function search(q: string, isAdmin: boolean) { const like = `%${q}%`; const tags = database.query<Pick<Tag, "name">, [string]>("SELECT name FROM tags WHERE deleted_at IS NULL AND name LIKE ? COLLATE NOCASE ORDER BY name LIMIT 12").all(like); const visibility = isAdmin ? "" : " AND v.is_hidden=0"; const rows = database.query<{ id: string; title: string; metadata: string }, [string, string, string]>(`SELECT DISTINCT v.id,v.title,v.metadata FROM videos v LEFT JOIN video_tags vt ON vt.video_id=v.id LEFT JOIN tags t ON t.id=vt.tag_id WHERE v.deleted_at IS NULL${visibility} AND (v.title LIKE ? COLLATE NOCASE OR json_extract(v.metadata,'$.filename') LIKE ? COLLATE NOCASE OR t.name LIKE ? COLLATE NOCASE) ORDER BY v.created_at DESC LIMIT 20`).all(like, like, like); return { tags, videos: rows.map((row) => ({ id: row.id, title: row.title, filename: filename(decodeJson(row.metadata), row.id) })) }; }
 export function getSetting(key: string) { const row = database.query<{ value: string }, [string]>("SELECT value FROM app_settings WHERE key=?").get(key); return row ? decodeJson(row.value) : undefined; }
 export function setSetting(key: string, value: unknown) { database.query("INSERT INTO app_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").run(key, JSON.stringify(value), now()); }
 database.exec("PRAGMA foreign_keys = ON;");

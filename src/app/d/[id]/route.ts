@@ -18,7 +18,7 @@ export async function GET(
       where: { id },
     });
 
-    if (!video || !video.activePath || video.status !== "COMPLETED") {
+    if (!video || !video.activePath || video.deletedAt) {
       return new NextResponse("Video not found or unavailable", {
         status: 404,
       });

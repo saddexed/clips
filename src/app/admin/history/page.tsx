@@ -1,10 +1,11 @@
-import { listJobHistory } from "@/lib/database";
+import { listJobHistoryPage } from "@/lib/database";
 import HistoryClient from "./HistoryClient";
 
 export const dynamic = "force-dynamic";
 
-export default async function HistoryPage() {
-  const historyRows = listJobHistory(100);
+export default async function HistoryPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+  const page = await searchParams;
+  const history = listJobHistoryPage(Number(page.page || 1), 50);
 
   return (
     <div>
@@ -25,7 +26,7 @@ export default async function HistoryPage() {
         </p>
       </div>
 
-      <HistoryClient items={historyRows} />
+      <HistoryClient items={history.items} page={history.page} totalPages={history.totalPages} />
     </div>
   );
 }

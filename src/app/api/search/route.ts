@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     const videos = await repository.video.findMany({
       where: {
         deletedAt: null,
-        ...(isAdmin ? {} : { status: "COMPLETED", isHidden: false }),
+        ...(isAdmin ? {} : { isHidden: false }),
         OR: [
           {
             title: {

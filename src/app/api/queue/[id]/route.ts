@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { repository } from "@/lib/repository";
 import { deleteQueueJob } from "@/lib/queue";
-import { unlink, mkdir, rename, stat } from "node:fs/promises";
-import path from "node:path";
 import { revalidatePath } from "next/cache";
-import { getDataPath, resolveStoredPath, toStoredPath } from "@/lib/paths";
+import { softDeleteVideo } from "@/lib/trash";
 
 export async function DELETE(
     request: NextRequest,
@@ -12,8 +10,11 @@ export async function DELETE(
 ) {
     try {
         const { id: jobId } = await params;
+        if (!/^\d+$/.test(jobId) || !Number.isSafeInteger(Number(jobId))) {
+            return NextResponse.json({ error: "Invalid job ID" }, { status: 400 });
+        }
 
-        const job = deleteQueueJob(jobId);
+        const job = deleteQueueJob(Number(jobId));
         if (!job) {
             return NextResponse.json(
                 { error: "Job not found" },
@@ -32,77 +33,23 @@ export async function DELETE(
 
             if (video && video.status !== "COMPLETED") {
                 console.log(
-                    `[Queue API] Associated video ${videoId} never completed. Scrubbing from library.`,
+                    `[Queue API] Associated video ${videoId} never completed. Moving it to trash.`,
                 );
 
-                // If it was still raw and in .uploads, move to trash, or just trash the process file
-                const dataPath = getDataPath();
-                const trashedDir = path.join(dataPath, ".trashed");
-                await mkdir(trashedDir, { recursive: true });
-
-                // Clean up raw upload if it exists
-                if (video.originalPath) {
-                    try {
-                        const sourcePath = resolveStoredPath(video.originalPath);
-                        if (sourcePath) await unlink(sourcePath);
-                    } catch {
-                        /* suppress */
-                    }
-                }
-
-                // Move processed output to trashed if it somehow survived partial processing
-                let trashedPath = null;
-                const retainedPath =
-                    video.processedPath ||
-                    (video.activePath !== video.originalPath ? video.activePath : null);
-                if (retainedPath) {
-                    try {
-                        const ext = path.extname(retainedPath);
-                        const physicalName = `${videoId}${ext}`;
-                        const trashedAbsolutePath = path.join(trashedDir, physicalName);
-                        trashedPath = toStoredPath(trashedAbsolutePath);
-                        const sourcePath = resolveStoredPath(retainedPath);
-                        if (!sourcePath) throw new Error("Active media path is empty");
-                        await stat(sourcePath);
-                        await rename(sourcePath, trashedAbsolutePath);
-                    } catch {
-                        /* suppress */
-                    }
-                }
-
-                // Temporary transcodes use deterministic names and do not need database records.
-                for (const extension of [".webm", ".webp"]) {
-                    await unlink(path.join(dataPath, "processed", `${videoId}${extension}`)).catch(() => {});
-                }
-
-                // Inform user in History tab
-                await repository.jobHistory.create({
-                    data: {
-                        videoId: video.id, // Only attach if we don't delete it? Actually we are deleting the whole record...
-                        jobType: "CANCELLED",
-                        status: "COMPLETED",
-                        completedAt: new Date(),
-                        metadata: {
-                            action: `Job ${jobId} manually cancelled before completion.`,
-                            originalUUID: video.id,
-                            trashedPath,
-                        },
-                    },
-                });
-
-                // Delete the master record, which implicitly orphans constraints or deletes cascades
-                await repository.video.delete({
-                    where: { id: videoId },
+                await softDeleteVideo(video, "CANCELLED", {
+                    action: `Job ${jobId} manually cancelled before completion.`,
                 });
 
                 console.log(
-                    `[Queue API] Scrapped uncompleted video ${videoId} and all associated files.`,
+                    `[Queue API] Moved uncompleted video ${videoId} and its artifacts to trash.`,
                 );
             }
         }
 
         revalidatePath("/admin");
         revalidatePath("/admin/tasks");
+        revalidatePath("/admin/settings");
+        revalidatePath("/");
 
         return NextResponse.json({ success: true }, { status: 200 });
     } catch (error: any) {

@@ -16,7 +16,7 @@ export async function generateMetadata({
   const { id } = await params;
   const video = await repository.video.findUnique({ where: { id } });
 
-  if (!video || video.status !== "COMPLETED") {
+  if (!video || video.deletedAt || !video.activePath) {
     return { title: "Not Found" };
   }
 
@@ -68,7 +68,7 @@ export default async function WatchPage({
     include: { tags: true },
   });
 
-  if (!video || video.status !== "COMPLETED") {
+  if (!video || video.deletedAt || !video.activePath) {
     notFound();
   }
 

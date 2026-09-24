@@ -1,4 +1,4 @@
-import { repository } from "../../lib/repository";
+import { listVideosPage } from "../../lib/database";
 import VideoTable from "./VideoTable";
 
 export const dynamic = "force-dynamic"; // Ensures this page isn't statically cached, always showing fresh DB state
@@ -6,21 +6,10 @@ export const dynamic = "force-dynamic"; // Ensures this page isn't statically ca
 export default async function AdminManagePage({
   searchParams,
 }: {
-  searchParams?: Promise<{ q?: string; tag?: string }>;
+  searchParams?: Promise<{ q?: string; tag?: string; page?: string }>;
 }) {
-  await searchParams;
-
-  const videos = await repository.video.findMany({
-    where: {
-      deletedAt: null,
-    },
-    orderBy: { uploadedAt: "desc" },
-    include: {
-      tags: true, // Eager load tags for the editor
-    },
-  });
-
-  console.log("AdminManagePage fetched", videos.length, "videos");
+  const params = await searchParams;
+  const videos = listVideosPage({ page: Number(params?.page || 1), limit: 50, query: params?.q, tags: params?.tag?.split(",") });
 
   return (
     <div>
@@ -49,7 +38,7 @@ export default async function AdminManagePage({
         </div>
       </div>
 
-      <VideoTable initialVideos={videos} />
+      <VideoTable initialVideos={videos.items} page={videos.page} totalPages={videos.totalPages} initialQuery={params?.q || ""} initialTags={params?.tag?.split(",").filter(Boolean) || []} />
     </div>
   );
 }

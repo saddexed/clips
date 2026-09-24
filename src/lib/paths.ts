@@ -59,3 +59,23 @@ export function resolveStoredPath(filePath: string | null | undefined): string |
   }
   return absolute;
 }
+
+export type ArtifactKind = "original" | "converted";
+
+function extension(value: string | null | undefined, fallback: string) {
+  const match = value?.match(/\.([a-z0-9]+)$/i);
+  return match ? `.${match[1].toLowerCase()}` : fallback;
+}
+
+/** Canonical active storage. The separate folders keep original and converted
+ * artifacts addressable even when both use the same container extension. */
+export function vaultArtifactPath(
+  id: string,
+  filename: string,
+  kind: ArtifactKind,
+  mediaType: "VIDEO" | "IMAGE" = "VIDEO",
+) {
+  const fallback = mediaType === "IMAGE" ? ".webp" : ".webm";
+  const suffix = kind === "original" ? extension(filename, fallback) : fallback;
+  return path.join(getDataPath(), "vault", kind, `${id}${suffix}`);
+}

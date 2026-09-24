@@ -15,6 +15,9 @@ type SearchBarProps = {
   onResultsChange: (items: SearchItem[]) => void;
   placeholder?: string;
   tagToAddSignal?: { tag: string; seq: number } | null;
+  initialQuery?: string;
+  initialTags?: string[];
+  onFiltersChange?: (query: string, tags: string[]) => void;
 };
 
 export default function SearchBar({
@@ -22,6 +25,9 @@ export default function SearchBar({
   onResultsChange,
   placeholder = "Search by title or tags...",
   tagToAddSignal = null,
+  initialQuery = "",
+  initialTags = [],
+  onFiltersChange,
 }: SearchBarProps) {
   const normalizeTagText = (value: string) =>
     value
@@ -33,15 +39,15 @@ export default function SearchBar({
   const sanitizeTagInput = (value: string) =>
     normalizeTagText(value).replace(/[^a-z0-9\s-]/g, "");
 
-  const [query, setQuery] = useState("");
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [query, setQuery] = useState(initialQuery);
+  const [selectedTags, setSelectedTags] = useState<string[]>(initialTags);
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
     const savedQuery = sessionStorage.getItem("clipsSearchQuery") || "";
     const savedTags = sessionStorage.getItem("clipsSearchTags");
-    if (savedQuery) setQuery(savedQuery);
-    if (savedTags) {
+    if (!initialQuery && !initialTags.length && savedQuery) setQuery(savedQuery);
+    if (!initialTags.length && savedTags) {
       try { setSelectedTags(JSON.parse(savedTags)); } catch {}
     }
     setIsHydrated(true);
@@ -52,6 +58,9 @@ export default function SearchBar({
     sessionStorage.setItem("clipsSearchQuery", query);
     sessionStorage.setItem("clipsSearchTags", JSON.stringify(selectedTags));
   }, [query, selectedTags, isHydrated]);
+  useEffect(() => {
+    if (isHydrated) onFiltersChange?.(query, selectedTags);
+  }, [query, selectedTags, isHydrated, onFiltersChange]);
   const [maxInlineSuggestions, setMaxInlineSuggestions] = useState(3);
   const shellRef = useRef<HTMLDivElement | null>(null);
 

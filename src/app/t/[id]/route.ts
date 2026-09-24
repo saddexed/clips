@@ -58,7 +58,7 @@ export async function GET(
         headers: {
           "Content-Type": "image/webp",
           "Content-Length": size.toString(),
-          "Cache-Control": "public, max-age=86400",
+          "Cache-Control": "no-store",
         },
       });
     } catch (err) {

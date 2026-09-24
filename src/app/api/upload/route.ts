@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir, unlink } from "node:fs/promises";
+import { writeFile, mkdir, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 import {
   createJobHistory,
@@ -10,9 +10,9 @@ import { getUploadDefaults } from "@/lib/settings";
 import { enqueueVideoJob } from "@/lib/queue";
 import { extractMetadata } from "@/lib/ffmpeg";
 import { normalizeMediaMetadata } from "@/lib/media";
-import { getDataPath, toStoredPath } from "@/lib/paths";
+import { getDataPath, toStoredPath, vaultArtifactPath } from "@/lib/paths";
 import { hashBytes } from "@/lib/hash";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 
@@ -55,15 +55,19 @@ export async function POST(request: NextRequest) {
 
     const dataPath = getDataPath();
     const tempDir = path.join(dataPath, ".uploads");
+    const originalDir = path.join(dataPath, "vault", "original");
 
-    // Ensure the .uploads directory exists
+    // Stage the upload outside the vault, then publish it with one rename.
     await mkdir(tempDir, { recursive: true });
+    await mkdir(originalDir, { recursive: true });
 
     // Generate UUID manually so we can write the file deterministically in one pass
     const videoId = crypto.randomUUID();
-    const ext = path.extname(file.name) || "";
-    const physicalName = `${videoId}${ext}`;
-    const filePath = path.join(tempDir, physicalName);
+    const physicalName = path.basename(
+      vaultArtifactPath(videoId, file.name, "original", isImage ? "IMAGE" : "VIDEO"),
+    );
+    const stagedPath = path.join(tempDir, physicalName);
+    const filePath = path.join(originalDir, physicalName);
 
     // Read the file as an ArrayBuffer and save to disk
     const bytes = await file.arrayBuffer();
@@ -75,7 +79,8 @@ export async function POST(request: NextRequest) {
         { status: 409 },
       );
     }
-    await writeFile(filePath, buffer);
+    await writeFile(stagedPath, buffer);
+    await rename(stagedPath, filePath);
 
     const lastModifiedStr = formData.get("lastModified")?.toString();
     const clientDate = lastModifiedStr
@@ -158,6 +163,8 @@ export async function POST(request: NextRequest) {
     // Force the Next.js router cache to invalidate the Manage tab
     // so it immediately picks up this new QUEUED video row.
     revalidatePath("/admin");
+    revalidatePath("/");
+    revalidateTag("videos", { expire: 0 });
 
     return NextResponse.json(
       {
