@@ -19,6 +19,8 @@ type SearchBarProps = {
   initialQuery?: string;
   initialTags?: string[];
   onFiltersChange?: (query: string, tags: string[]) => void;
+  /** Header variant: pill shell, no max width, tighter height. */
+  compact?: boolean;
 };
 
 const chipClass = (selected: boolean) =>
@@ -35,6 +37,7 @@ export default function SearchBar({
   initialQuery = "",
   initialTags = [],
   onFiltersChange,
+  compact = false,
 }: SearchBarProps) {
   const normalizeTagText = (value: string) =>
     value
@@ -166,10 +169,15 @@ export default function SearchBar({
   }, [tagToAddSignal?.seq]);
 
   return (
-    <div className="relative w-full max-w-[860px]">
+    <div className={cn("relative w-full", !compact && "max-w-[860px]")}>
       <div
         ref={shellRef}
-        className="flex min-h-12 w-full flex-wrap items-center gap-2 rounded-2xl border border-line-soft bg-surface px-3.5 py-2 shadow-[0_1px_0_var(--line-soft)] transition-colors focus-within:border-line"
+        className={cn(
+          "flex w-full flex-wrap items-center gap-2 border border-line-soft bg-surface transition-colors focus-within:border-line",
+          compact
+            ? "min-h-9 rounded-full px-3 py-1"
+            : "min-h-12 rounded-2xl px-3.5 py-2 shadow-[0_1px_0_var(--line-soft)]",
+        )}
       >
         <Search size={16} className="shrink-0 text-muted" />
 
@@ -204,7 +212,10 @@ export default function SearchBar({
           }}
           placeholder={placeholder}
           aria-label={placeholder}
-          className="h-8 min-w-[140px] flex-1 bg-transparent text-[0.95rem] text-ink outline-none placeholder:text-muted focus-visible:outline-none"
+          className={cn(
+            "min-w-[140px] flex-1 bg-transparent text-ink outline-none placeholder:text-muted focus-visible:outline-none",
+            compact ? "h-7 text-sm" : "h-8 text-[0.95rem]",
+          )}
         />
 
         {normalizedQuery && inlineSuggestedTags.length > 0 ? (

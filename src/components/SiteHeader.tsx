@@ -3,12 +3,21 @@ import { ArrowLeft } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/utils";
 
-export function SiteHeader({ backHref, narrow = false }: { backHref?: string; narrow?: boolean }) {
+export function SiteHeader({
+  backHref,
+  narrow = false,
+  children,
+}: {
+  backHref?: string;
+  narrow?: boolean;
+  children?: React.ReactNode;
+}) {
   return (
     <header className="sticky top-0 z-20 border-b border-line-soft bg-bg/80 backdrop-blur-xl">
       <div
         className={cn(
-          "mx-auto flex h-14 w-full items-center justify-between gap-4 px-4 sm:px-6",
+          "mx-auto flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 sm:flex-nowrap sm:px-6",
+          children ? "min-h-14" : "h-14",
           narrow ? "max-w-player" : "max-w-7xl",
         )}
       >
@@ -33,7 +42,16 @@ export function SiteHeader({ backHref, narrow = false }: { backHref?: string; na
             sd3xV
           </Link>
         </div>
-        <ThemeToggle />
+
+        {children ? (
+          <div className="order-last w-full basis-full sm:order-none sm:mx-auto sm:w-auto sm:min-w-0 sm:flex-1 sm:basis-auto">
+            {children}
+          </div>
+        ) : null}
+
+        <div className="ml-auto flex items-center">
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );

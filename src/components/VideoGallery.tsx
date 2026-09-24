@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import SearchBar, { type SearchItem } from "@/components/SearchBar";
+import { SiteHeader } from "@/components/SiteHeader";
 import { VideoThumbnail } from "@/components/VideoThumbnail";
 
 type GalleryVideo = SearchItem & {
@@ -39,20 +40,23 @@ export default function VideoGallery({ initialVideos }: { initialVideos: Gallery
   const isFiltered = filteredVideos.length !== initialVideos.length;
 
   return (
-    <div className="flex flex-col gap-8">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-2">
+    <>
+      <SiteHeader>
         <SearchBar
           items={searchItems}
           onResultsChange={handleResultsChange}
           placeholder="Search titles or tags"
           tagToAddSignal={tagToAddSignal}
+          compact
         />
-        <p className="px-1 font-mono text-[0.6875rem] uppercase tracking-[0.08em] text-muted" aria-live="polite">
+      </SiteHeader>
+
+      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 pt-6 pb-16 sm:px-6 sm:pt-8">
+        <p className="font-mono text-[0.6875rem] tracking-[0.08em] text-muted uppercase" aria-live="polite">
           {isFiltered
             ? `${filteredVideos.length} of ${initialVideos.length} clips`
             : `${initialVideos.length} ${initialVideos.length === 1 ? "clip" : "clips"}`}
         </p>
-      </div>
 
       {filteredVideos.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-line px-6 py-16 text-center text-muted">
@@ -111,8 +115,9 @@ export default function VideoGallery({ initialVideos }: { initialVideos: Gallery
               </Link>
             </li>
           ))}
-        </ul>
-      )}
-    </div>
+          </ul>
+        )}
+      </main>
+    </>
   );
 }
