@@ -1,15 +1,17 @@
 import {
   getDefaultTags,
   getDefaultVisibilityEnabled,
+  getFfmpegParameters,
 } from "@/lib/settings";
 import SettingsClient from "./SettingsClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const [defaultTags, defaultVisibilityEnabled] = await Promise.all([
+  const [defaultTags, defaultVisibilityEnabled, ffmpegParameters] = await Promise.all([
     getDefaultTags(),
     getDefaultVisibilityEnabled(),
+    Promise.resolve(getFfmpegParameters()),
   ]);
 
   return (
@@ -18,14 +20,12 @@ export default async function SettingsPage() {
         <h1 style={{ fontSize: "1.875rem", fontWeight: 600, letterSpacing: "-0.025em", marginBottom: "0.25rem" }}>
           Settings
         </h1>
-        <p style={{ color: "var(--muted-foreground)" }}>
-          Configure defaults for newly uploaded media.
-        </p>
       </div>
 
       <SettingsClient
         initialDefaultTags={defaultTags}
-        initialVisibilityEnabled={defaultVisibilityEnabled}
+          initialVisibilityEnabled={defaultVisibilityEnabled}
+          initialFfmpegParameters={ffmpegParameters}
       />
     </div>
   );

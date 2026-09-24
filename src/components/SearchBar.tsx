@@ -44,11 +44,13 @@ export default function SearchBar({
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
-    const savedQuery = sessionStorage.getItem("clipsSearchQuery") || "";
-    const savedTags = sessionStorage.getItem("clipsSearchTags");
-    if (!initialQuery && !initialTags.length && savedQuery) setQuery(savedQuery);
-    if (!initialTags.length && savedTags) {
-      try { setSelectedTags(JSON.parse(savedTags)); } catch {}
+    if (!onFiltersChange) {
+      const savedQuery = sessionStorage.getItem("clipsSearchQuery") || "";
+      const savedTags = sessionStorage.getItem("clipsSearchTags");
+      if (!initialQuery && !initialTags.length && savedQuery) setQuery(savedQuery);
+      if (!initialTags.length && savedTags) {
+        try { setSelectedTags(JSON.parse(savedTags)); } catch {}
+      }
     }
     setIsHydrated(true);
   }, []);

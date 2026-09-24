@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Eye, EyeOff, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
-import { revalidateVideosCache } from "./actions";
+import { Eye, EyeOff, RefreshCw, RotateCcw, Trash2, Pencil } from "lucide-react";
 
 type TrashItem = {
   videoId: string;
@@ -33,9 +32,11 @@ function formatDeletedAt(value: string) {
 export default function SettingsClient({
   initialDefaultTags,
   initialVisibilityEnabled,
+  initialFfmpegParameters,
 }: {
   initialDefaultTags: string[];
   initialVisibilityEnabled: boolean;
+  initialFfmpegParameters: string;
 }) {
   const normalizeTag = (input: string) => input.trim().toLowerCase().replace(/_/g, " ").replace(/\s+/g, " ").replace(/[^a-z0-9\s-_]/g, "");
 
@@ -44,11 +45,15 @@ export default function SettingsClient({
   );
   const [tagQuery, setTagQuery] = useState("");
   const [visibilityEnabled, setVisibilityEnabled] = useState(initialVisibilityEnabled);
+  const [ffmpegParameters, setFfmpegParameters] = useState(initialFfmpegParameters);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
+  const [tagItems, setTagItems] = useState<{ id: string; name: string }[]>([]);
+  const [deletedTags, setDeletedTags] = useState<{ id: string; name: string }[]>([]);
+  const [tagPage, setTagPage] = useState(1);
+  const [tagTotalPages, setTagTotalPages] = useState(1);
+  const [editingTag, setEditingTag] = useState<{ id: string; name: string } | null>(null);
   const [trashItems, setTrashItems] = useState<TrashItem[]>([]);
   const [trashPage, setTrashPage] = useState(1);
   const [trashTotalPages, setTrashTotalPages] = useState(1);
@@ -98,6 +103,14 @@ export default function SettingsClient({
     void loadTrash(1);
   }, [loadTrash]);
 
+  const loadTags = useCallback(async (page = 1) => {
+    const response = await fetch(`/api/settings/tags?page=${page}&includeDeleted=true`, { cache: "no-store" });
+    if (!response.ok) return;
+    const payload = await response.json();
+    setTagItems(payload.items || []); setDeletedTags(payload.deleted || []); setTagPage(payload.page || page); setTagTotalPages(payload.totalPages || 1);
+  }, []);
+  useEffect(() => { void loadTags(); }, [loadTags]);
+
   const runTrashAction = async ({
     key,
     url,
@@ -132,19 +145,6 @@ export default function SettingsClient({
       setTrashError(e instanceof Error ? e.message : "Trash action failed.");
     } finally {
       setTrashAction(null);
-    }
-  };
-
-  const refreshCache = async () => {
-    setIsRefreshing(true);
-    setRefreshMessage(null);
-    try {
-      await revalidateVideosCache();
-      setRefreshMessage("Cache cleared — home page will reflect latest videos on next visit.");
-    } catch {
-      setRefreshMessage("Failed to refresh cache.");
-    } finally {
-      setIsRefreshing(false);
     }
   };
 
@@ -193,6 +193,7 @@ export default function SettingsClient({
         body: JSON.stringify({
           tags: selectedTags,
           visibilityEnabled,
+          ffmpegParameters,
         }),
       });
 
@@ -207,6 +208,7 @@ export default function SettingsClient({
         : [];
       setSelectedTags(normalizedTags);
       setVisibilityEnabled(Boolean(payload.visibilityEnabled));
+      setFfmpegParameters(payload.ffmpegParameters || ffmpegParameters);
       setMessage("Default upload settings updated.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
@@ -216,7 +218,7 @@ export default function SettingsClient({
   };
 
   return (
-    <div className="glass-panel" style={{ borderRadius: "var(--radius)", padding: "1.25rem" }}>
+      <div className="glass-panel" style={{ borderRadius: "var(--radius)", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
       <h2 style={{ fontSize: "1.1rem", marginBottom: "0.35rem" }}>Defaults</h2>
       <p style={{ color: "var(--muted-foreground)", fontSize: "0.9rem", marginBottom: "1rem" }}>
         Any new upload will automatically receive these tags. Use comma-separated values.
@@ -284,28 +286,35 @@ export default function SettingsClient({
       {message ? <p style={{ color: "#4ade80", marginTop: "0.75rem", fontSize: "0.85rem" }}>{message}</p> : null}
       {error ? <p style={{ color: "#f87171", marginTop: "0.75rem", fontSize: "0.85rem" }}>{error}</p> : null}
 
-      <div className="glass-panel" style={{ borderRadius: "var(--radius)", padding: "1.25rem", marginTop: "1.25rem" }}>
-        <h2 style={{ fontSize: "1.1rem", marginBottom: "0.35rem" }}>Cache</h2>
-        <p style={{ color: "var(--muted-foreground)", fontSize: "0.9rem", marginBottom: "1rem" }}>
-          The home page video list is cached for 60 seconds. Click below to purge it instantly so new uploads appear immediately.
-        </p>
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          <button
-            className="btn-secondary"
-            onClick={refreshCache}
-            disabled={isRefreshing}
-            style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-          >
-            <RefreshCw size={15} style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }} />
-            {isRefreshing ? "Refreshing..." : "Refresh Cache"}
-          </button>
-          {refreshMessage && (
-            <p style={{ fontSize: "0.85rem", color: refreshMessage.startsWith("Failed") ? "#f87171" : "#4ade80", margin: 0 }}>
-              {refreshMessage}
-            </p>
-          )}
-        </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+        <h2 style={{ fontSize: "1.1rem" }}>Encoder parameters</h2>
+        <p style={{ color: "var(--muted-foreground)", fontSize: "0.9rem", margin: 0 }}>Optional leading <code>ffmpeg</code> is accepted. Input, output, format, and overwrite options are managed by the application.</p>
+        <input value={ffmpegParameters} onChange={(event) => setFfmpegParameters(event.target.value)} aria-label="Encoder parameters" style={{ width: "100%" }} />
       </div>
+
+      <section style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <h2 style={{ fontSize: "1.1rem" }}>Tags</h2>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+          {tagItems.map((tag) => <button key={tag.id} type="button" className="btn-secondary" onClick={() => setEditingTag(tag)}><Pencil size={14} /> {tag.name}</button>)}
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", color: "var(--muted-foreground)" }}>
+          {deletedTags.map((tag) => <button key={tag.id} type="button" className="btn-secondary" onClick={async () => { await fetch("/api/settings/tags", { method: "POST", body: JSON.stringify({ id: tag.id }) }); void loadTags(tagPage); }}>Restore {tag.name}</button>)}
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><span>Page {tagPage} of {tagTotalPages}</span><span style={{ display: "flex", gap: "0.5rem" }}><button className="btn-secondary" disabled={tagPage <= 1} onClick={() => void loadTags(tagPage - 1)}>Previous</button><button className="btn-secondary" disabled={tagPage >= tagTotalPages} onClick={() => void loadTags(tagPage + 1)}>Next</button></span></div>
+      </section>
+      {editingTag ? (
+        <div role="dialog" aria-modal="true" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+          <div className="glass-panel" style={{ padding: "1.25rem", width: "min(24rem, calc(100vw - 2rem))", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            <h2 style={{ fontSize: "1.1rem" }}>Manage tag</h2>
+            <input value={editingTag.name} onChange={(event) => setEditingTag({ ...editingTag, name: event.target.value })} aria-label="Tag name" />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
+              <button className="btn-secondary" onClick={() => setEditingTag(null)}>Cancel</button>
+              <button className="btn-secondary" onClick={async () => { if (!window.confirm(`Delete ${editingTag.name}?`)) return; await fetch(`/api/settings/tags?id=${encodeURIComponent(editingTag.id)}`, { method: "DELETE" }); setEditingTag(null); void loadTags(tagPage); }}>Delete</button>
+              <button className="btn-primary" onClick={async () => { const response = await fetch("/api/settings/tags", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(editingTag) }); if (!response.ok) { const payload = await response.json(); setError(payload.error || "Failed to rename tag."); return; } setEditingTag(null); void loadTags(tagPage); }}>Save</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <section style={{ marginTop: "1.5rem", paddingTop: "1.25rem", borderTop: "1px solid var(--border)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>

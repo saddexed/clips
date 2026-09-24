@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { getFfmpegParameters } from "./settings";
+import { parseFfmpegParameters } from "./ffmpeg-parameters";
 
 export type VideoMetadata = {
   duration?: number;
@@ -136,46 +138,11 @@ export async function transcodeToWebM(
   sourceAudioBitrate?: number,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const sourceAudioKbps =
-      sourceAudioBitrate && sourceAudioBitrate > 0
-        ? Math.round(sourceAudioBitrate / 1000)
-        : 128;
-    const audioBitrateKbps = Math.max(48, Math.min(192, sourceAudioKbps));
-
     const args = [
       "-y", // Overwrite output files
       "-i",
       inputPath,
-      "-c:v",
-      "libvpx-vp9",
-      "-profile:v",
-      "2",
-      "-pix_fmt",
-      "yuv420p10le",
-      "-deadline",
-      "good",
-      "-cpu-used",
-      "3",
-      "-tile-columns",
-      "2",
-      "-tile-rows",
-      "1",
-      "-threads",
-      "4",
-      "-row-mt",
-      "1",
-      "-crf",
-      "30",
-      "-b:v",
-      "8M",
-      "-maxrate",
-      "8M",
-      "-bufsize",
-      "16M",
-      "-c:a",
-      "libopus",
-      "-b:a",
-      `${audioBitrateKbps}k`,
+      ...parseFfmpegParameters(getFfmpegParameters()),
       "-f",
       "webm",
       outputPath,

@@ -3,6 +3,7 @@ import {
   createVideo,
   deleteVideo,
   findVideoIdByOriginalSha256,
+  listVideosPage,
 } from "./database";
 import { hashBytes } from "./hash";
 
@@ -38,5 +39,35 @@ test("original upload hashes are unique in SQLite", () => {
   } finally {
     deleteVideo(firstId);
     deleteVideo(duplicateId);
+  }
+});
+
+test("manage pagination keeps filtered results within page bounds", () => {
+  const ids = Array.from({ length: 3 }, () => crypto.randomUUID());
+  const title = `pagination-${ids[0]}`;
+  const now = Date.now();
+
+  try {
+    ids.forEach((id, index) => createVideo({
+      id,
+      filename: `${id}.mp4`,
+      title,
+      status: "QUEUED",
+      originalSha256: hashBytes(new TextEncoder().encode(id)),
+      originalSize: 1,
+      createdAt: new Date(now + index * 1000),
+      uploadedAt: new Date(now + index * 1000),
+      isHidden: false,
+    }));
+
+    const first = listVideosPage({ page: 1, limit: 2, query: title });
+    expect(first.total).toBe(3);
+    expect(first.totalPages).toBe(2);
+    expect(first.items.map((video) => video.id)).toEqual([ids[2], ids[1]]);
+    expect(listVideosPage({ page: 2, limit: 2, query: title }).items.map((video) => video.id)).toEqual([ids[0]]);
+    expect(listVideosPage({ page: 99, limit: 2, query: title }).page).toBe(2);
+    expect(listVideosPage({ page: Number.NaN, limit: 2, query: title }).page).toBe(1);
+  } finally {
+    ids.forEach(deleteVideo);
   }
 });

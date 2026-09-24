@@ -9,7 +9,7 @@ export default async function AdminManagePage({
   searchParams?: Promise<{ q?: string; tag?: string; page?: string }>;
 }) {
   const params = await searchParams;
-  const videos = listVideosPage({ page: Number(params?.page || 1), limit: 50, query: params?.q, tags: params?.tag?.split(",") });
+  const videos = listVideosPage({ page: Number(params?.page || 1), limit: 25, query: params?.q, tags: params?.tag?.split(",") });
 
   return (
     <div>
@@ -38,7 +38,7 @@ export default async function AdminManagePage({
         </div>
       </div>
 
-      <VideoTable initialVideos={videos.items} page={videos.page} totalPages={videos.totalPages} initialQuery={params?.q || ""} initialTags={params?.tag?.split(",").filter(Boolean) || []} />
+      <VideoTable initialVideos={videos.items} page={videos.page} total={videos.total} totalPages={videos.totalPages} initialQuery={params?.q || ""} initialTags={params?.tag?.split(",").filter(Boolean) || []} />
     </div>
   );
 }

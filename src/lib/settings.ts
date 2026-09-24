@@ -1,5 +1,7 @@
 import { getSetting, setSetting } from "@/lib/database";
 
+export const DEFAULT_FFMPEG_PARAMETERS = "-c:v libvpx-vp9 -profile:v 2 -pix_fmt yuv420p10le -deadline good -cpu-used 3 -tile-columns 2 -tile-rows 1 -threads 4 -row-mt 1 -crf 30 -b:v 8M -maxrate 8M -bufsize 16M -c:a libopus -b:a 128k";
+
 function normalizeTags(tags: string[]): string[] {
   return Array.from(
     new Set(
@@ -46,4 +48,14 @@ export async function getUploadDefaults() {
     getDefaultVisibilityEnabled(),
   ]);
   return { tags, visibilityEnabled };
+}
+
+export function getFfmpegParameters(): string {
+  const value = getSetting("ffmpeg_parameters");
+  return typeof value === "string" && value.trim() ? value : DEFAULT_FFMPEG_PARAMETERS;
+}
+
+export function setFfmpegParameters(value: string): string {
+  setSetting("ffmpeg_parameters", value);
+  return value;
 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useOptimistic, useTransition, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Pencil, X, Save, AlertCircle, CheckCircle, Clock, Activity, AlertTriangle, Eye, EyeOff, Trash2, ArrowUpDown, ChevronUp, ChevronDown, History as HistoryIcon } from 'lucide-react';
+import { Pencil, X, Save, AlertCircle, CheckCircle, Clock, Activity, AlertTriangle, Eye, EyeOff, Trash2, ArrowUpDown, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, History as HistoryIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import SafeVideoPlayer from '@/components/SafeVideoPlayer';
 import SearchBar, { type SearchItem } from '@/components/SearchBar';
@@ -29,7 +29,7 @@ type Video = {
   isHidden: boolean;
 };
 
-export default function VideoTable({ initialVideos, page, totalPages, initialQuery = '', initialTags = [] }: { initialVideos: Video[]; page: number; totalPages: number; initialQuery?: string; initialTags?: string[] }) {
+export default function VideoTable({ initialVideos, page, total, totalPages, initialQuery = '', initialTags = [] }: { initialVideos: Video[]; page: number; total: number; totalPages: number; initialQuery?: string; initialTags?: string[] }) {
   const router = useRouter();
   // We use useMemo to force a re-render when initialVideos identity changes deeply
   // NextJS router.refresh() updates Server Component props, but React might hold old state
@@ -120,12 +120,21 @@ export default function VideoTable({ initialVideos, page, totalPages, initialQue
 
   const handleFiltersChange = useCallback((query: string, tags: string[]) => {
     const params = new URLSearchParams(window.location.search);
+    if ((params.get('q') || '') === query.trim() && (params.get('tag') || '') === tags.join(',')) return;
     if (query.trim()) params.set('q', query.trim()); else params.delete('q');
     if (tags.length) params.set('tag', tags.join(',')); else params.delete('tag');
     params.delete('page');
     const nextUrl = `/admin${params.toString() ? `?${params.toString()}` : ''}`;
     if (`${window.location.pathname}${window.location.search}` !== nextUrl) router.replace(nextUrl);
   }, [router]);
+
+  const pageUrl = (nextPage: number) => {
+    const params = new URLSearchParams();
+    params.set('page', String(nextPage));
+    if (initialQuery.trim()) params.set('q', initialQuery.trim());
+    if (initialTags.length) params.set('tag', initialTags.join(','));
+    return `/admin?${params.toString()}`;
+  };
 
   const handleEditComplete = (updatedVideo: Video) => {
     setLocalVideos(localVideos.map(v => v.id === updatedVideo.id ? updatedVideo : v));
@@ -174,7 +183,7 @@ export default function VideoTable({ initialVideos, page, totalPages, initialQue
         />
       </div>
 
-      <div className="glass-panel" style={{ borderRadius: 'var(--radius)', overflow: 'auto', maxHeight: '70vh' }}>
+      <div className="glass-panel" style={{ borderRadius: 'var(--radius)', overflow: 'auto' }}>
         {visibleVideos.length === 0 ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted-foreground)' }}>
             <p>No videos found in the library.</p>
@@ -308,10 +317,10 @@ export default function VideoTable({ initialVideos, page, totalPages, initialQue
           </table>
         )}
       </div>
-      {totalPages > 1 && <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', marginTop: '1rem', alignItems: 'center' }}>
-        <button className="btn-secondary" disabled={page <= 1} onClick={() => router.push(`/admin?page=${page - 1}${initialQuery ? `&q=${encodeURIComponent(initialQuery)}` : ''}${initialTags.length ? `&tag=${encodeURIComponent(initialTags.join(','))}` : ''}`)} title="Previous page"><ChevronUp size={16} style={{ transform: 'rotate(-90deg)' }} /></button>
-        <span>Page {page} of {totalPages}</span>
-        <button className="btn-secondary" disabled={page >= totalPages} onClick={() => router.push(`/admin?page=${page + 1}${initialQuery ? `&q=${encodeURIComponent(initialQuery)}` : ''}${initialTags.length ? `&tag=${encodeURIComponent(initialTags.join(','))}` : ''}`)} title="Next page"><ChevronDown size={16} style={{ transform: 'rotate(-90deg)' }} /></button>
+      {total > 0 && <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', marginTop: '1rem', alignItems: 'center' }}>
+        <button className="btn-secondary" disabled={page <= 1} onClick={() => router.push(pageUrl(page - 1))} title="Previous page" aria-label="Previous page"><ChevronLeft size={16} /></button>
+        <span>Page {page} of {totalPages} ({total} clips)</span>
+        <button className="btn-secondary" disabled={page >= totalPages} onClick={() => router.push(pageUrl(page + 1))} title="Next page" aria-label="Next page"><ChevronRight size={16} /></button>
       </div>}
 
       {editingVideo && (

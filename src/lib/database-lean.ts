@@ -8,7 +8,7 @@ export type MediaType = "VIDEO" | "IMAGE";
 export type VideoStatus = "UPLOADING" | "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
 export type JobType = "UPLOAD" | "TRANSCODE" | "METADATA_EXTRACT" | "EDIT" | "DELETE" | "HIDE" | "RESTORE" | "CANCELLED";
 export type JobStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
-export type Tag = { id: string; name: string };
+export type Tag = { id: string; name: string; deletedAt?: Date | null };
 export type Video = {
   id: string;
   title: string;
@@ -237,6 +237,33 @@ CREATE INDEX IF NOT EXISTS trash_items_deleted_at_idx ON trash_items(deleted_at)
 function tagsFor(videoId: string) {
   return database.query<Tag, [string]>("SELECT t.id,t.name FROM tags t JOIN video_tags vt ON vt.tag_id=t.id WHERE vt.video_id=? AND t.deleted_at IS NULL ORDER BY t.name").all(videoId);
 }
+export function listTagsPage(page = 1, limit = 50) {
+  const safeLimit = Math.min(50, Math.max(1, Math.floor(limit)));
+  const safePage = Math.max(1, Math.floor(page));
+  const total = Number(database.query<{ count: number }, []>("SELECT COUNT(*) count FROM tags WHERE deleted_at IS NULL").get()?.count || 0);
+  const rows = database.query<{ id: string; name: string; deleted_at: string | null }, [number, number]>("SELECT id,name,deleted_at FROM tags WHERE deleted_at IS NULL ORDER BY name LIMIT ? OFFSET ?").all(safeLimit, (safePage - 1) * safeLimit);
+  return { items: rows.map((row) => ({ id: row.id, name: row.name, deletedAt: row.deleted_at ? new Date(row.deleted_at) : null })), page: safePage, limit: safeLimit, total, totalPages: Math.max(1, Math.ceil(total / safeLimit)) };
+}
+export function renameTag(id: string, name: string) {
+  const existing = database.query<{ id: string }, [string, string]>("SELECT id FROM tags WHERE name=? COLLATE NOCASE AND id<>? AND deleted_at IS NULL").get(name, id);
+  if (existing) throw new Error("A tag with that name already exists.");
+  const result = database.query("UPDATE tags SET name=? WHERE id=? AND deleted_at IS NULL").run(name, id);
+  if (!result.changes) throw new Error("Tag not found.");
+}
+export function softDeleteTag(id: string) {
+  const result = database.query("UPDATE tags SET deleted_at=? WHERE id=? AND deleted_at IS NULL").run(now(), id);
+  if (!result.changes) throw new Error("Tag not found.");
+}
+export function listDeletedTags() {
+  return database.query<{ id: string; name: string; deleted_at: string }, []>("SELECT id,name,deleted_at FROM tags WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC").all().map((row) => ({ id: row.id, name: row.name, deletedAt: new Date(row.deleted_at) }));
+}
+export function restoreTag(id: string) {
+  const tag = database.query<{ name: string }, [string]>("SELECT name FROM tags WHERE id=? AND deleted_at IS NOT NULL").get(id);
+  if (!tag) throw new Error("Deleted tag not found.");
+  const existing = database.query<{ id: string }, [string, string]>("SELECT id FROM tags WHERE name=? COLLATE NOCASE AND id<>? AND deleted_at IS NULL").get(tag.name, id);
+  if (existing) throw new Error("A tag with that name already exists.");
+  database.query("UPDATE tags SET deleted_at=NULL WHERE id=?").run(id);
+}
 function replaceTags(videoId: string, names: string[]) {
   database.query("DELETE FROM video_tags WHERE video_id=?").run(videoId);
   for (const name of names) {
@@ -303,7 +330,8 @@ export function findVideoIdByOriginalSha256(hash: string) { return database.quer
 export function listVideos(options: { publicOnly?: boolean; limit?: number } = {}) { const filters = ["deleted_at IS NULL"]; if (options.publicOnly) filters.push("is_hidden=0"); const limit = options.limit ? ` LIMIT ${Math.max(1, Math.floor(options.limit))}` : ""; return database.query<VideoRow, []>(`SELECT * FROM videos WHERE ${filters.join(" AND ")} ORDER BY ${options.publicOnly ? "created_at" : "uploaded_at"} DESC${limit}`).all().map((row) => mapVideo(row, tagsFor(row.id))); }
 export function listVideosPage(options: { page?: number; limit?: number; query?: string; tags?: string[] } = {}) {
   const limit = Math.min(50, Math.max(1, Math.floor(options.limit || 50)));
-  const page = Math.max(1, Math.floor(options.page || 1));
+  const requestedPage = options.page ?? 1;
+  const page = Number.isFinite(requestedPage) ? Math.max(1, Math.floor(requestedPage)) : 1;
   const query = (options.query || "").trim();
   const like = `%${query}%`;
   const tags = (options.tags || []).map((tag) => tag.trim().toLowerCase()).filter(Boolean);
@@ -313,8 +341,10 @@ export function listVideosPage(options: { page?: number; limit?: number; query?:
   for (const tag of tags) { conditions.push("EXISTS (SELECT 1 FROM video_tags selected_vt JOIN tags selected_t ON selected_t.id=selected_vt.tag_id WHERE selected_vt.video_id=v.id AND selected_t.deleted_at IS NULL AND selected_t.name = ?)"); params.push(tag); }
   const where = conditions.join(" AND ");
   const total = Number(database.query<{ count: number }, any[]>(`SELECT COUNT(DISTINCT v.id) count FROM videos v LEFT JOIN video_tags vt ON vt.video_id=v.id LEFT JOIN tags t ON t.id=vt.tag_id WHERE ${where}`).get(...params)?.count || 0);
-  const rows = database.query<VideoRow, (string | number)[]>(`SELECT DISTINCT v.* FROM videos v LEFT JOIN video_tags vt ON vt.video_id=v.id LEFT JOIN tags t ON t.id=vt.tag_id WHERE ${where} ORDER BY v.uploaded_at DESC LIMIT ? OFFSET ?`).all(...params, limit, (page - 1) * limit);
-  return { items: rows.map((row) => mapVideo(row, tagsFor(row.id))), page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) };
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const currentPage = Math.min(page, totalPages);
+  const rows = database.query<VideoRow, (string | number)[]>(`SELECT DISTINCT v.* FROM videos v LEFT JOIN video_tags vt ON vt.video_id=v.id LEFT JOIN tags t ON t.id=vt.tag_id WHERE ${where} ORDER BY v.uploaded_at DESC LIMIT ? OFFSET ?`).all(...params, limit, (currentPage - 1) * limit);
+  return { items: rows.map((row) => mapVideo(row, tagsFor(row.id))), page: currentPage, limit, total, totalPages };
 }
 
 type VideoInput = { id: string; title: string; status: VideoStatus; size?: number; sha256Hash?: string | null; originalSha256?: string | null; metadata?: Record<string, unknown> | null; originalMetadata?: Record<string, unknown> | null; activeSize?: number; filename?: string; originalSize?: number; createdAt: Date; uploadedAt: Date; deletedAt?: Date | null; isHidden: boolean; tags?: string[] };

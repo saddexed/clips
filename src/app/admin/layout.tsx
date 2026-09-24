@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { LayoutDashboard, ListVideo, Upload, Activity, Home, History, LogOut, Settings } from 'lucide-react';
 import '../globals.css';
 import { GlobalUploadProvider } from '@/components/GlobalUploadProvider';
-import WorkerStatusBadge from '@/components/WorkerStatusBadge';
+import AdminReloadButton from '@/components/AdminReloadButton';
 
 export const metadata = {
   title: 'Clips Admin',
@@ -32,14 +32,12 @@ export default function AdminLayout({
               <NavLink href="/admin/settings" icon={<Settings size={16} />} label="Settings" />
             </div>
 
-            <div style={{ paddingLeft: '1rem', borderLeft: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', fontSize: '0.75rem' }}>
-              <WorkerStatusBadge />
-            </div>
           </nav>
           <div style={{ position: 'absolute', right: '2rem', top: '1rem', display: 'flex', gap: '0.75rem', zIndex: 50, pointerEvents: 'auto' }}>
             <a href="/api/auth/logout" title="Log Out" style={{ background: 'var(--foreground)', color: 'var(--background)', padding: '0.75rem', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
               <LogOut size={20} />
             </a>
+            <AdminReloadButton />
             <Link href="/" title="Return to Main Site" style={{ background: 'var(--foreground)', color: 'var(--background)', padding: '0.75rem', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
               <Home size={20} />
             </Link>

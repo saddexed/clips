@@ -4,7 +4,10 @@ import {
   getDefaultVisibilityEnabled,
   setDefaultTags,
   setDefaultVisibilityEnabled,
+  getFfmpegParameters,
+  setFfmpegParameters,
 } from "@/lib/settings";
+import { parseFfmpegParameters } from "@/lib/ffmpeg-parameters";
 
 export async function GET() {
   try {
@@ -13,7 +16,7 @@ export async function GET() {
       getDefaultVisibilityEnabled(),
     ]);
 
-    return NextResponse.json({ tags, visibilityEnabled });
+    return NextResponse.json({ tags, visibilityEnabled, ffmpegParameters: getFfmpegParameters() });
   } catch (error) {
     console.error("Default tags GET Error:", error);
     return NextResponse.json({ error: "Failed to load default settings" }, { status: 500 });
@@ -25,15 +28,19 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const tags = Array.isArray(body?.tags) ? body.tags : [];
     const visibilityEnabled = Boolean(body?.visibilityEnabled);
+    const ffmpegParameters = typeof body?.ffmpegParameters === "string" ? body.ffmpegParameters : getFfmpegParameters();
+    parseFfmpegParameters(ffmpegParameters);
 
     const [savedTags, savedVisibilityEnabled] = await Promise.all([
       setDefaultTags(tags),
       setDefaultVisibilityEnabled(visibilityEnabled),
+      Promise.resolve(setFfmpegParameters(ffmpegParameters)),
     ]);
 
     return NextResponse.json({
       tags: savedTags,
       visibilityEnabled: savedVisibilityEnabled,
+      ffmpegParameters,
     });
   } catch (error) {
     console.error("Default tags PUT Error:", error);

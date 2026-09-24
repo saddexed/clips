@@ -50,7 +50,9 @@ export default function TasksPage() {
 
     fetchData();
     const intervalId = setInterval(fetchData, 15000);
-    return () => clearInterval(intervalId);
+    const refresh = () => void fetchData();
+    window.addEventListener('admin-data-refresh', refresh);
+    return () => { clearInterval(intervalId); window.removeEventListener('admin-data-refresh', refresh); };
   }, [page]);
 
   const refresh = async () => {
