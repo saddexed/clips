@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Activity, Clock, AlertTriangle, CheckCircle, Trash2, Loader2, PauseCircle, PlayCircle, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Activity, Clock, AlertTriangle, CheckCircle, Trash2, Loader2, PauseCircle, PlayCircle } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { PageHeader, Pager, StatusPill, btn, panelClass, tableClass, type Tone } from '@/components/ui';
 
 type QueueData = {
   counts: {
@@ -32,7 +34,6 @@ export default function TasksPage() {
   const [data, setData] = useState<QueueData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -54,16 +55,6 @@ export default function TasksPage() {
     window.addEventListener('admin-data-refresh', refresh);
     return () => { clearInterval(intervalId); window.removeEventListener('admin-data-refresh', refresh); };
   }, [page]);
-
-  const refresh = async () => {
-    setIsRefreshing(true);
-    try {
-      const res = await fetch(`/api/queue?page=${page}&limit=50`, { cache: 'no-store' });
-      if (res.ok) setData(await res.json());
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
 
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [isQueueActionLoading, setIsQueueActionLoading] = useState(false);
@@ -120,111 +111,70 @@ export default function TasksPage() {
   };
 
   return (
-    <div>
-      <div style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '1.875rem', fontWeight: 600, letterSpacing: '-0.025em', marginBottom: '0.25rem' }}>
-          Task Queue Monitoring
-        </h1>
-        <p style={{ color: 'var(--muted-foreground)' }}>View real-time statistics of background video processing workers.</p>
-        <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <button
-            onClick={handleQueuePauseToggle}
-            disabled={isQueueActionLoading || !data}
-            className={data?.isPaused ? 'btn-primary' : 'btn-secondary'}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
-          >
-            {isQueueActionLoading ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : data?.isPaused ? (
-              <PlayCircle size={16} />
-            ) : (
-              <PauseCircle size={16} />
-            )}
-            {data?.isPaused ? 'Resume Queue' : 'Pause Queue'}
-          </button>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Queue"
+        meta={
+          <>
+            <CountChip count={data?.counts.active || 0} label="active" tone="info" icon={<Activity size={12} />} />
+            <CountChip count={data?.counts.wait || 0} label="waiting" tone="warn" icon={<Clock size={12} />} />
+            <CountChip count={data?.counts.completed || 0} label="done" tone="ok" icon={<CheckCircle size={12} />} />
+            <CountChip count={data?.counts.failed || 0} label="failed" tone="bad" icon={<AlertTriangle size={12} />} />
+          </>
+        }
+      >
+        <QueueStateSwitch
+          isPaused={data?.isPaused ?? false}
+          disabled={isQueueActionLoading || !data}
+          loading={isQueueActionLoading}
+          onToggle={handleQueuePauseToggle}
+        />
+      </PageHeader>
 
-          <button className="btn-secondary" onClick={refresh} disabled={isRefreshing} title="Refresh queue">
-            <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
-          </button>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
-        <StatCard title="Active Jobs" value={data?.counts.active || 0} icon={<Activity color="#3b82f6" />} />
-        <StatCard title="Pending" value={data?.counts.wait || 0} icon={<Clock color="#f59e0b" />} />
-        <StatCard title="Completed" value={data?.counts.completed || 0} icon={<CheckCircle color="#10b981" />} />
-        <StatCard title="Failed" value={data?.counts.failed || 0} icon={<AlertTriangle color="#ef4444" />} />
-      </div>
-
-      <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Active & Recent Jobs</h2>
-      <div className="glass-panel" style={{ borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+      <div className={cn(panelClass, 'overflow-x-auto')}>
         {isLoading && !data ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted-foreground)' }}>Loading queue details...</div>
+          <div className="px-6 py-16 text-center text-muted">Loading the queue…</div>
         ) : !data || data.recentJobs.length === 0 ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted-foreground)' }}>No active or recent jobs found.</div>
+          <div className="px-6 py-16 text-center text-muted">The queue is empty. New uploads show up here while they convert.</div>
         ) : (
-          <table className="data-table">
+          <table className={tableClass}>
             <thead>
               <tr>
-                <th>Job ID</th>
+                <th>Job</th>
                 <th>Video</th>
-                <th>Status / Progress</th>
-                <th>Created At</th>
-                <th style={{ textAlign: 'center' }}>Actions</th>
+                <th>Progress</th>
+                <th>Created</th>
+                <th className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {data.recentJobs.map((job) => (
-                <tr key={job.id}>
-                  <td style={{ fontFamily: 'monospace', color: 'var(--muted-foreground)' }}>#{job.id}</td>
-                  <td>
-                    <div style={{ fontWeight: 500 }}>{job.title || 'Deleted video'}</div>
-                    <div style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>{job.videoId || '-'}</div>
+                <tr key={job.id} className={cn('hover:bg-chip/35', job.status === 'failed' && 'bg-bad/5')}>
+                  <td className="font-mono text-xs text-muted">#{job.id}</td>
+                  <td className="max-w-[22rem]">
+                    <div className={cn('truncate font-medium', job.title ? 'text-ink' : 'italic text-muted')}>{job.title || 'Deleted video'}</div>
+                    <div className="mt-0.5 truncate font-mono text-[0.6875rem] text-muted">{job.videoId || '—'}</div>
                   </td>
-                  <td>
-                    {job.status === 'active' ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <div style={{ flex: 1, height: '6px', background: 'var(--secondary)', borderRadius: '999px', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${job.progress || 0}%`, background: '#3b82f6', transition: 'width 0.3s ease' }} />
-                        </div>
-                        <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>{job.progress || 0}%</span>
-                      </div>
-                    ) : job.status === 'completed' ? (
-                      <span style={{ fontSize: '0.875rem' }}>{formatCompleted(job.originalSize, job.processedSize)}</span>
-                    ) : job.status === 'failed' ? (
-                      <div style={{ color: '#ef4444', fontSize: '0.875rem' }}>
-                        Failed: {job.failedReason}
-                      </div>
-                    ) : (
-                      <span className="badge info">Waiting in Queue</span>
-                    )}
+                  <td className="min-w-[16rem]">
+                    <JobProgress job={job} />
                   </td>
-                  <td style={{ color: 'var(--muted-foreground)', fontSize: '0.875rem' }}>
+                  <td className="whitespace-nowrap text-muted">
                     {new Date(job.timestamp).toLocaleString()}
                   </td>
-                  <td style={{ textAlign: 'center' }}>
-                    {job.status !== 'completed' && <button
-                      onClick={() => handleDeleteJob(job.id)}
-                      disabled={deletingId === job.id}
-                      style={{ 
-                        padding: '0.4rem', 
-                        background: 'rgba(239, 68, 68, 0.1)', 
-                        border: 'none', 
-                        borderRadius: '0.375rem', 
-                        color: '#ef4444', 
-                        cursor: deletingId === job.id ? 'not-allowed' : 'pointer', 
-                        display: 'inline-flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'center',
-                        transition: 'background-color 0.2s',
-                        opacity: deletingId === job.id ? 0.5 : 1
-                      }}
-                      onMouseEnter={(e) => !deletingId && (e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.2)')}
-                      onMouseLeave={(e) => !deletingId && (e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)')}
-                      title="Cancel / Delete Job"
-                    >
-                      {deletingId === job.id ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
-                    </button>}
+                  <td>
+                    <div className="flex justify-end">
+                      {job.status !== 'completed' && (
+                        <button
+                          onClick={() => handleDeleteJob(job.id)}
+                          disabled={deletingId === job.id}
+                          className={btn('danger', 'icon-sm')}
+                          title="Cancel / Delete Job"
+                          aria-label="Cancel and delete job"
+                        >
+                          {deletingId === job.id ? <Loader2 size={17} className="animate-spin" /> : <Trash2 size={17} />}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -232,19 +182,51 @@ export default function TasksPage() {
           </table>
         )}
       </div>
-      {data && data.totalPages > 1 && <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', marginTop: '1rem', alignItems: 'center' }}>
-        <button className="btn-secondary" disabled={page <= 1} onClick={() => setPage((value) => value - 1)} title="Previous page"><ChevronLeft size={16} /></button>
-        <span>Page {page} of {data.totalPages}</span>
-        <button className="btn-secondary" disabled={page >= data.totalPages} onClick={() => setPage((value) => value + 1)} title="Next page"><ChevronRight size={16} /></button>
-      </div>}
+
+      {data && data.totalPages > 1 && (
+        <Pager page={page} totalPages={data.totalPages} onPage={setPage} />
+      )}
     </div>
   );
 }
 
-function formatCompleted(original: number, processed: number) {
-  if (!processed) return 'Completed';
-  const change = original ? Math.round(((original - processed) / original) * 100) : 0;
-  return `${formatBytes(original)} -> ${formatBytes(processed)} (${change >= 0 ? `${change}% smaller` : `${Math.abs(change)}% larger`})`;
+function JobProgress({ job }: { job: QueueData['recentJobs'][number] }) {
+  if (job.status === 'active') {
+    return (
+      <div className="flex items-center gap-3">
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
+          <div className="h-full bg-info transition-[width] duration-300" style={{ width: `${job.progress || 0}%` }} />
+        </div>
+        <span className="w-10 text-right font-mono text-xs text-ink">{job.progress || 0}%</span>
+      </div>
+    );
+  }
+
+  if (job.status === 'completed') {
+    if (!job.processedSize) return <StatusPill tone="ok" icon={<CheckCircle size={12} />}>Completed</StatusPill>;
+    const change = job.originalSize ? Math.round(((job.originalSize - job.processedSize) / job.originalSize) * 100) : 0;
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="whitespace-nowrap font-mono text-xs text-ink">
+          {formatBytes(job.originalSize)} <span className="text-muted">→</span> {formatBytes(job.processedSize)}
+        </span>
+        <StatusPill tone={change >= 0 ? 'ok' : 'warn'}>
+          {change >= 0 ? `${change}% smaller` : `${Math.abs(change)}% larger`}
+        </StatusPill>
+      </div>
+    );
+  }
+
+  if (job.status === 'failed') {
+    return (
+      <div className="flex flex-col items-start gap-1">
+        <StatusPill tone="bad" icon={<AlertTriangle size={12} />}>Failed</StatusPill>
+        {job.failedReason ? <span className="break-words text-xs text-bad">{job.failedReason}</span> : null}
+      </div>
+    );
+  }
+
+  return <StatusPill tone="info" icon={<Clock size={12} />}>Waiting</StatusPill>;
 }
 
 function formatBytes(bytes: number) {
@@ -254,14 +236,50 @@ function formatBytes(bytes: number) {
   return `${Number((bytes / 1024 ** index).toFixed(2))} ${units[index]}`;
 }
 
-function StatCard({ title, value, icon }: { title: string; value: number | string; icon: React.ReactNode }) {
+function CountChip({ count, label, tone, icon }: { count: number; label: string; tone: Tone; icon: React.ReactNode }) {
+  // Zero counts stay neutral so only states with jobs draw attention
   return (
-    <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: 'var(--radius)', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-        <span style={{ color: 'var(--muted-foreground)', fontWeight: 500 }}>{title}</span>
-        {icon}
-      </div>
-      <span style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.025em' }}>{value}</span>
+    <StatusPill tone={count > 0 ? tone : 'neutral'} icon={icon}>
+      <span className="font-mono tabular-nums">{count}</span> {label}
+    </StatusPill>
+  );
+}
+
+function QueueStateSwitch({ isPaused, disabled, loading, onToggle }: { isPaused: boolean; disabled: boolean; loading: boolean; onToggle: () => void }) {
+  const options = [
+    { paused: false, label: 'Running', icon: PlayCircle, dot: 'bg-ok' },
+    { paused: true, label: 'Paused', icon: PauseCircle, dot: 'bg-warn' },
+  ];
+
+  return (
+    <div role="radiogroup" aria-label="Queue state" className="flex items-center rounded-full border border-line-soft bg-surface p-0.5">
+      {options.map(({ paused, label, icon: Icon, dot }) => {
+        const active = isPaused === paused;
+        return (
+          <button
+            key={label}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            disabled={disabled || active}
+            onClick={onToggle}
+            title={active ? `Queue is ${label.toLowerCase()}` : paused ? 'Pause queue' : 'Resume queue'}
+            className={cn(
+              'inline-flex h-8 items-center gap-2 rounded-full px-3.5 text-sm font-medium transition-colors disabled:cursor-default',
+              active ? 'bg-bg text-ink shadow-sm ring-1 ring-line-soft' : 'cursor-pointer text-muted enabled:hover:text-ink',
+            )}
+          >
+            {loading && !active ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : active ? (
+              <span className={cn('size-2 rounded-full', dot)} />
+            ) : (
+              <Icon size={14} />
+            )}
+            {label}
+          </button>
+        );
+      })}
     </div>
   );
 }

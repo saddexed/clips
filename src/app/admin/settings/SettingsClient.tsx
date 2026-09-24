@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Eye, EyeOff, RefreshCw, RotateCcw, Trash2, Pencil } from "lucide-react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { Eye, EyeOff, RotateCcw, Trash2, Save, X, AlertCircle, CheckCircle2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Modal, Pager, Segmented, StatusPill, btn, inputClass, labelClass, panelClass, tableClass } from "@/components/ui";
 
 type TrashItem = {
   videoId: string;
@@ -29,6 +31,50 @@ function formatDeletedAt(value: string) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
+function Section({
+  title,
+  description,
+  actions,
+  footer,
+  className,
+  children,
+}: {
+  title: string;
+  description?: ReactNode;
+  actions?: ReactNode;
+  footer?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className={cn(panelClass, "flex flex-col", className)}>
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line-soft px-5 py-4">
+        <div className="flex flex-col gap-0.5">
+          <h2 className="font-display text-lg font-bold tracking-tight text-ink">{title}</h2>
+          {description ? <p className="text-sm text-muted">{description}</p> : null}
+        </div>
+        {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
+      </div>
+      <div className="flex flex-1 flex-col gap-5 px-5 py-5">{children}</div>
+      {footer ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line-soft bg-bg/40 px-5 py-3">{footer}</div>
+      ) : null}
+    </section>
+  );
+}
+
+function Notice({ tone, children }: { tone: "ok" | "bad"; children: ReactNode }) {
+  return (
+    <p
+      role={tone === "bad" ? "alert" : "status"}
+      className={cn("flex items-center gap-2 text-sm font-medium", tone === "ok" ? "text-ok" : "text-bad")}
+    >
+      {tone === "ok" ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
+      {children}
+    </p>
+  );
+}
+
 export default function SettingsClient({
   initialDefaultTags,
   initialVisibilityEnabled,
@@ -54,6 +100,7 @@ export default function SettingsClient({
   const [tagPage, setTagPage] = useState(1);
   const [tagTotalPages, setTagTotalPages] = useState(1);
   const [editingTag, setEditingTag] = useState<{ id: string; name: string } | null>(null);
+  const [tagError, setTagError] = useState<string | null>(null);
   const [trashItems, setTrashItems] = useState<TrashItem[]>([]);
   const [trashPage, setTrashPage] = useState(1);
   const [trashTotalPages, setTrashTotalPages] = useState(1);
@@ -111,6 +158,13 @@ export default function SettingsClient({
   }, []);
   useEffect(() => { void loadTags(); }, [loadTags]);
 
+  // The header reload button broadcasts this event; refresh tags and trash in place.
+  useEffect(() => {
+    const refresh = () => { void loadTags(tagPage); void loadTrash(trashPage); };
+    window.addEventListener("admin-data-refresh", refresh);
+    return () => window.removeEventListener("admin-data-refresh", refresh);
+  }, [loadTags, loadTrash, tagPage, trashPage]);
+
   const runTrashAction = async ({
     key,
     url,
@@ -146,28 +200,6 @@ export default function SettingsClient({
     } finally {
       setTrashAction(null);
     }
-  };
-
-  const iconButtonStyle: React.CSSProperties = {
-    width: "2.1rem",
-    height: "2.1rem",
-    padding: "0",
-    background: "var(--secondary)",
-    border: "none",
-    borderRadius: "0.375rem",
-    color: "var(--foreground)",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    transition: "background-color 0.2s",
-  };
-
-  const trashCellStyle: React.CSSProperties = {
-    textAlign: "left",
-    padding: "0.7rem 0.5rem",
-    borderBottom: "1px solid var(--border)",
-    fontSize: "0.875rem",
   };
 
   const addTag = (raw: string) => {
@@ -209,7 +241,7 @@ export default function SettingsClient({
       setSelectedTags(normalizedTags);
       setVisibilityEnabled(Boolean(payload.visibilityEnabled));
       setFfmpegParameters(payload.ffmpegParameters || ffmpegParameters);
-      setMessage("Default upload settings updated.");
+      setMessage("Upload defaults saved.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -217,212 +249,264 @@ export default function SettingsClient({
     }
   };
 
+  const closeTagModal = useCallback(() => {
+    setEditingTag(null);
+    setTagError(null);
+  }, []);
+
+  const renameTag = async () => {
+    if (!editingTag) return;
+    const response = await fetch("/api/settings/tags", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(editingTag) });
+    if (!response.ok) {
+      const payload = await response.json();
+      setTagError(payload.error || "Failed to rename tag.");
+      return;
+    }
+    closeTagModal();
+    void loadTags(tagPage);
+  };
+
+  const deleteTag = async () => {
+    if (!editingTag) return;
+    if (!window.confirm(`Delete ${editingTag.name}?`)) return;
+    await fetch(`/api/settings/tags?id=${encodeURIComponent(editingTag.id)}`, { method: "DELETE" });
+    closeTagModal();
+    void loadTags(tagPage);
+  };
+
+  const restoreTag = async (id: string) => {
+    await fetch("/api/settings/tags", { method: "POST", body: JSON.stringify({ id }) });
+    void loadTags(tagPage);
+  };
+
+  const trashBusy = isLoadingTrash || trashAction !== null;
+
   return (
-      <div className="glass-panel" style={{ borderRadius: "var(--radius)", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-      <h2 style={{ fontSize: "1.1rem", marginBottom: "0.35rem" }}>Defaults</h2>
-      <p style={{ color: "var(--muted-foreground)", fontSize: "0.9rem", marginBottom: "1rem" }}>
-        Any new upload will automatically receive these tags. Use comma-separated values.
-      </p>
+    <div className="grid gap-6 xl:grid-cols-2">
+      <Section
+        title="Upload defaults"
+        description="Applied to every new upload."
+        footer={
+          <>
+            <div className="min-h-5">
+              {message ? <Notice tone="ok">{message}</Notice> : null}
+              {error ? <Notice tone="bad">{error}</Notice> : null}
+            </div>
+            <button className={btn("solid")} onClick={save} disabled={isSaving}>
+              <Save size={16} />
+              {isSaving ? "Saving…" : "Save defaults"}
+            </button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-2">
+          <span className={labelClass}>Tags</span>
+          <div className="flex min-h-10 flex-wrap items-center gap-1.5 rounded-xl border border-line-soft bg-bg px-2 py-1.5 transition-colors focus-within:border-line">
+            {selectedTags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-solid px-2.5 py-0.5 font-mono text-xs lowercase text-solid-ink hover:opacity-85"
+                onClick={() => removeTag(tag)}
+                title="Remove tag"
+                aria-label={`Remove tag ${tag}`}
+              >
+                <X size={11} />
+                {tag}
+              </button>
+            ))}
 
-      <div className="search-inline-shell" style={{ marginBottom: "0.8rem" }}>
-        {selectedTags.map((tag) => (
-          <button
-            key={tag}
-            type="button"
-            className="search-tag-chip search-tag-chip--selected"
-            onClick={() => removeTag(tag)}
-            title="Remove tag"
-          >
-            × {tag}
-          </button>
-        ))}
+            <input
+              type="text"
+              value={tagQuery}
+              onChange={(e) => setTagQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Tab" || e.key === "Enter") {
+                  e.preventDefault();
+                  addTag(tagQuery);
+                  return;
+                }
 
-        <input
-          type="text"
-          value={tagQuery}
-          onChange={(e) => setTagQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Tab" || e.key === "Enter") {
-              e.preventDefault();
-              addTag(tagQuery);
-              return;
-            }
-
-            if ((e.key === "Backspace" || e.key === "Delete") && !tagQuery.trim() && selectedTags.length > 0) {
-              e.preventDefault();
-              setSelectedTags((prev) => prev.slice(0, -1));
-            }
-          }}
-          placeholder="Type tag and press Enter/Tab"
-          className="search-inline-input"
-        />
-      </div>
-
-
-      <div style={{ marginTop: "0.9rem", marginBottom: "0.9rem", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem" }}>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <button
-            type="button"
-            onClick={() => setVisibilityEnabled((prev) => !prev)}
-            title={visibilityEnabled ? "Visible by default" : "Hidden by default"}
-            aria-label={visibilityEnabled ? "Visible by default" : "Hidden by default"}
-            style={iconButtonStyle}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.1)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "var(--secondary)";
-            }}
-          >
-            {visibilityEnabled ? <Eye size={16} /> : <EyeOff size={16} />}
-          </button>
+                if ((e.key === "Backspace" || e.key === "Delete") && !tagQuery.trim() && selectedTags.length > 0) {
+                  e.preventDefault();
+                  setSelectedTags((prev) => prev.slice(0, -1));
+                }
+              }}
+              placeholder="Add a tag, then Enter"
+              aria-label="Add default tag"
+              className="h-7 min-w-[8rem] flex-1 bg-transparent px-1 text-sm text-ink outline-none placeholder:text-muted focus-visible:outline-none"
+            />
+          </div>
         </div>
 
-        <button className="btn-primary" onClick={save} disabled={isSaving}>
-          {isSaving ? "Saving..." : "Save Settings"}
-        </button>
-      </div>
-
-      {message ? <p style={{ color: "#4ade80", marginTop: "0.75rem", fontSize: "0.85rem" }}>{message}</p> : null}
-      {error ? <p style={{ color: "#f87171", marginTop: "0.75rem", fontSize: "0.85rem" }}>{error}</p> : null}
-
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-        <h2 style={{ fontSize: "1.1rem" }}>Encoder parameters</h2>
-        <p style={{ color: "var(--muted-foreground)", fontSize: "0.9rem", margin: 0 }}>Optional leading <code>ffmpeg</code> is accepted. Input, output, format, and overwrite options are managed by the application.</p>
-        <input value={ffmpegParameters} onChange={(event) => setFfmpegParameters(event.target.value)} aria-label="Encoder parameters" style={{ width: "100%" }} />
-      </div>
-
-      <section style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-        <h2 style={{ fontSize: "1.1rem" }}>Tags</h2>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-          {tagItems.map((tag) => <button key={tag.id} type="button" className="btn-secondary" onClick={() => setEditingTag(tag)}><Pencil size={14} /> {tag.name}</button>)}
+        <div className="flex flex-col gap-2">
+          <span className={labelClass}>Visibility</span>
+          <Segmented
+            className="self-start"
+            value={visibilityEnabled ? "visible" : "hidden"}
+            onChange={(value) => setVisibilityEnabled(value === "visible")}
+            options={[
+              { value: "visible", label: <><Eye size={14} />Visible on homepage</> },
+              { value: "hidden", label: <><EyeOff size={14} />Hidden</> },
+            ]}
+          />
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", color: "var(--muted-foreground)" }}>
-          {deletedTags.map((tag) => <button key={tag.id} type="button" className="btn-secondary" onClick={async () => { await fetch("/api/settings/tags", { method: "POST", body: JSON.stringify({ id: tag.id }) }); void loadTags(tagPage); }}>Restore {tag.name}</button>)}
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><span>Page {tagPage} of {tagTotalPages}</span><span style={{ display: "flex", gap: "0.5rem" }}><button className="btn-secondary" disabled={tagPage <= 1} onClick={() => void loadTags(tagPage - 1)}>Previous</button><button className="btn-secondary" disabled={tagPage >= tagTotalPages} onClick={() => void loadTags(tagPage + 1)}>Next</button></span></div>
-      </section>
-      {editingTag ? (
-        <div role="dialog" aria-modal="true" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
-          <div className="glass-panel" style={{ padding: "1.25rem", width: "min(24rem, calc(100vw - 2rem))", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-            <h2 style={{ fontSize: "1.1rem" }}>Manage tag</h2>
-            <input value={editingTag.name} onChange={(event) => setEditingTag({ ...editingTag, name: event.target.value })} aria-label="Tag name" />
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
-              <button className="btn-secondary" onClick={() => setEditingTag(null)}>Cancel</button>
-              <button className="btn-secondary" onClick={async () => { if (!window.confirm(`Delete ${editingTag.name}?`)) return; await fetch(`/api/settings/tags?id=${encodeURIComponent(editingTag.id)}`, { method: "DELETE" }); setEditingTag(null); void loadTags(tagPage); }}>Delete</button>
-              <button className="btn-primary" onClick={async () => { const response = await fetch("/api/settings/tags", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(editingTag) }); if (!response.ok) { const payload = await response.json(); setError(payload.error || "Failed to rename tag."); return; } setEditingTag(null); void loadTags(tagPage); }}>Save</button>
+
+        <label className="flex flex-col gap-2">
+          <span className={labelClass}>Encoder parameters</span>
+          <input
+            value={ffmpegParameters}
+            onChange={(event) => setFfmpegParameters(event.target.value)}
+            aria-label="Encoder parameters"
+            spellCheck={false}
+            className={cn(inputClass, "font-mono text-xs")}
+          />
+          <span className="text-xs text-muted">
+            A leading <code className="font-mono">ffmpeg</code> is optional. Input, output, format and overwrite options are set by the app.
+          </span>
+        </label>
+      </Section>
+
+      <Section title="Tags" description="Select a tag to rename or delete it.">
+        {tagItems.length === 0 ? (
+          <p className="text-sm text-muted">No tags yet. Tags you add to clips appear here.</p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {tagItems.map((tag) => (
+              <button
+                key={tag.id}
+                type="button"
+                className="cursor-pointer rounded-full bg-chip px-3 py-1 font-mono text-xs lowercase text-chip-ink transition-colors hover:ring-1 hover:ring-line"
+                onClick={() => setEditingTag(tag)}
+              >
+                #{tag.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {deletedTags.length > 0 ? (
+          <div className="flex flex-col gap-2 border-t border-line-soft pt-4">
+            <span className={labelClass}>Deleted tags</span>
+            <div className="flex flex-wrap gap-1.5">
+              {deletedTags.map((tag) => (
+                <button
+                  key={tag.id}
+                  type="button"
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-dashed border-line px-3 py-1 font-mono text-xs lowercase text-muted transition-colors hover:border-solid hover:text-ink"
+                  onClick={() => void restoreTag(tag.id)}
+                  title={`Restore ${tag.name}`}
+                >
+                  <RotateCcw size={11} />
+                  {tag.name}
+                </button>
+              ))}
             </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
 
-      <section style={{ marginTop: "1.5rem", paddingTop: "1.25rem", borderTop: "1px solid var(--border)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-          <div>
-            <h2 style={{ fontSize: "1.1rem", marginBottom: "0.25rem" }}>Trash</h2>
-            <p style={{ color: "var(--muted-foreground)", fontSize: "0.85rem", margin: 0 }}>
-              Items are retained for up to 14 days.
-            </p>
+        {tagTotalPages > 1 ? (
+          <div className="mt-auto">
+            <Pager page={tagPage} totalPages={tagTotalPages} onPage={(next) => void loadTags(next)} />
           </div>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
+        ) : null}
+      </Section>
+
+      <Section
+        className="xl:col-span-2"
+        title="Trash"
+        description="Kept for 14 days, then deleted for good."
+        actions={
+          trashTotal > 0 || trashItems.length > 0 ? (
             <button
-              className="btn-secondary"
-              onClick={() => void loadTrash(trashPage)}
-              disabled={isLoadingTrash || trashAction !== null}
-              title="Refresh trash"
-              aria-label="Refresh trash"
-              style={{ display: "flex", alignItems: "center", justifyContent: "center", minWidth: "2.25rem" }}
+              className={btn("danger", "sm")}
+              onClick={() => void runTrashAction({
+                key: "clear",
+                url: "/api/trash",
+                method: "DELETE",
+                confirmText: `Permanently delete all ${trashTotal || trashItems.length} trash items? This cannot be undone.`,
+                successMessage: "Trash emptied.",
+                reloadPage: 1,
+              })}
+              disabled={trashBusy}
             >
-              <RefreshCw size={15} style={{ animation: isLoadingTrash ? "spin 1s linear infinite" : "none" }} />
+              <Trash2 size={14} />
+              Empty trash
             </button>
-            {trashTotal > 0 || trashItems.length > 0 ? (
-              <button
-                className="btn-secondary"
-                onClick={() => void runTrashAction({
-                  key: "clear",
-                  url: "/api/trash",
-                  method: "DELETE",
-                  confirmText: `Permanently delete all ${trashTotal || trashItems.length} trash items? This cannot be undone.`,
-                  successMessage: "Trash cleared.",
-                  reloadPage: 1,
-                })}
-                disabled={isLoadingTrash || trashAction !== null}
-                style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "#f87171" }}
-              >
-                <Trash2 size={15} />
-                Clear all
-              </button>
-            ) : null}
-          </div>
-        </div>
+          ) : null
+        }
+      >
+        {trashError && <Notice tone="bad">{trashError}</Notice>}
+        {trashMessage && <Notice tone="ok">{trashMessage}</Notice>}
 
-        {trashError && <p role="alert" style={{ color: "#f87171", marginTop: "0.75rem", fontSize: "0.85rem" }}>{trashError}</p>}
-        {trashMessage && <p role="status" style={{ color: "#4ade80", marginTop: "0.75rem", fontSize: "0.85rem" }}>{trashMessage}</p>}
-
-        {isLoadingTrash ? (
-          <p style={{ color: "var(--muted-foreground)", marginTop: "1rem", fontSize: "0.9rem" }}>Loading trash...</p>
+        {isLoadingTrash && trashItems.length === 0 ? (
+          <p className="text-sm text-muted">Loading trash…</p>
         ) : trashItems.length === 0 ? (
-          <p style={{ color: "var(--muted-foreground)", marginTop: "1rem", fontSize: "0.9rem" }}>Trash is empty.</p>
+          <p className="text-sm text-muted">Trash is empty.</p>
         ) : (
-          <div style={{ overflowX: "auto", marginTop: "0.75rem" }}>
-            <table style={{ width: "100%", minWidth: "34rem", borderCollapse: "collapse" }}>
+          <div className="-mx-5 overflow-x-auto first:-mt-5 last:-mb-5">
+            <table className={cn(tableClass, "min-w-[40rem]")}>
               <thead>
                 <tr>
-                  <th scope="col" style={trashCellStyle}>Clip</th>
-                  <th scope="col" style={trashCellStyle}>Artifact</th>
-                  <th scope="col" style={trashCellStyle}>Deleted</th>
-                  <th scope="col" style={trashCellStyle}>Status</th>
-                  <th scope="col" style={{ ...trashCellStyle, textAlign: "right" }}>Actions</th>
+                  <th scope="col">Clip</th>
+                  <th scope="col">File</th>
+                  <th scope="col">Deleted</th>
+                  <th scope="col">Status</th>
+                  <th scope="col" className="text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {trashItems.map((item) => (
-                  <tr key={`${item.videoId}:${item.artifactKind}`}>
-                    <td style={{ ...trashCellStyle, maxWidth: "20rem", overflowWrap: "anywhere" }}>
-                      <div>{item.title || item.filename}</div>
+                  <tr key={`${item.videoId}:${item.artifactKind}`} className="hover:bg-chip/35">
+                    <td className="max-w-[20rem]">
+                      <div className="break-words font-medium text-ink">{item.title || item.filename}</div>
                       {item.title && item.title !== item.filename ? (
-                        <div style={{ color: "var(--muted-foreground)", fontSize: "0.8rem", marginTop: "0.15rem" }}>{item.filename}</div>
+                        <div className="mt-0.5 break-all font-mono text-[0.6875rem] text-muted">{item.filename}</div>
                       ) : null}
                     </td>
-                    <td style={{ ...trashCellStyle, whiteSpace: "nowrap" }}>
-                      {item.artifactKind === "original" ? "Original" : "Converted"}
+                    <td className="whitespace-nowrap">
+                      <StatusPill tone="neutral">{item.artifactKind === "original" ? "Original" : "Converted"}</StatusPill>
                     </td>
-                    <td style={{ ...trashCellStyle, whiteSpace: "nowrap" }}>{formatDeletedAt(item.deletedAt)}</td>
-                    <td style={{ ...trashCellStyle, color: item.missing ? "#f87171" : "var(--muted-foreground)" }}>
-                      {item.missing ? "Missing artifact" : "Available"}
+                    <td className="whitespace-nowrap text-muted">{formatDeletedAt(item.deletedAt)}</td>
+                    <td>
+                      {item.missing ? (
+                        <StatusPill tone="bad" icon={<AlertCircle size={12} />}>Missing file</StatusPill>
+                      ) : (
+                        <StatusPill tone="ok">Available</StatusPill>
+                      )}
                     </td>
-                    <td style={trashCellStyle}>
-                      <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.4rem" }}>
+                    <td>
+                      <div className="flex justify-end gap-1">
                         <button
                           type="button"
+                          className={btn("ghost", "icon-sm")}
                           onClick={() => void runTrashAction({
                             key: `restore:${item.videoId}:${item.artifactKind}`,
                             url: `/api/trash/${encodeURIComponent(item.videoId)}/restore?kind=${encodeURIComponent(item.artifactKind)}`,
                             method: "POST",
-                            successMessage: `${item.artifactKind === "original" ? "Original" : "Converted"} artifact restored.`,
+                            successMessage: `${item.artifactKind === "original" ? "Original" : "Converted"} file restored.`,
                           })}
-                          disabled={item.missing || isLoadingTrash || trashAction !== null}
+                          disabled={item.missing || trashBusy}
                           title={item.missing ? "Cannot restore because the artifact is missing" : `Restore ${item.filename}`}
                           aria-label={item.missing ? `Cannot restore ${item.filename}; artifact is missing` : `Restore ${item.filename}`}
-                          style={{ ...iconButtonStyle, opacity: item.missing ? 0.5 : 1, cursor: item.missing ? "not-allowed" : "pointer" }}
                         >
-                          <RotateCcw size={15} />
+                          <RotateCcw size={16} />
                         </button>
                         <button
                           type="button"
+                          className={btn("danger", "icon-sm")}
                           onClick={() => void runTrashAction({
                             key: `delete:${item.videoId}:${item.artifactKind}`,
                             url: `/api/trash/${encodeURIComponent(item.videoId)}?kind=${encodeURIComponent(item.artifactKind)}`,
                             method: "DELETE",
                             confirmText: `Permanently delete ${item.filename}? This cannot be undone.`,
-                            successMessage: "Item permanently deleted.",
+                            successMessage: "File permanently deleted.",
                           })}
-                          disabled={isLoadingTrash || trashAction !== null}
+                          disabled={trashBusy}
                           title={`Permanently delete ${item.filename}`}
                           aria-label={`Permanently delete ${item.filename}`}
-                          style={{ ...iconButtonStyle, color: "#f87171" }}
                         >
-                          <Trash2 size={15} />
+                          <Trash2 size={16} />
                         </button>
                       </div>
                     </td>
@@ -433,32 +517,43 @@ export default function SettingsClient({
           </div>
         )}
 
-        {!isLoadingTrash && trashItems.length > 0 ? (
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", marginTop: "0.75rem" }}>
-            <span style={{ color: "var(--muted-foreground)", fontSize: "0.85rem" }}>
-              Page {trashPage} of {trashTotalPages}
-            </span>
-            <div style={{ display: "flex", gap: "0.5rem" }}>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => void loadTrash(trashPage - 1)}
-                disabled={trashPage <= 1 || isLoadingTrash || trashAction !== null}
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => void loadTrash(trashPage + 1)}
-                disabled={trashPage >= trashTotalPages || isLoadingTrash || trashAction !== null}
-              >
-                Next
-              </button>
-            </div>
-          </div>
+        {trashItems.length > 0 && trashTotalPages > 1 ? (
+          <Pager page={trashPage} totalPages={trashTotalPages} onPage={(next) => { if (!trashBusy) void loadTrash(next); }} />
         ) : null}
-      </section>
+      </Section>
+
+      {editingTag ? (
+        <Modal
+          title="Edit tag"
+          onClose={closeTagModal}
+          className="max-w-sm"
+          footer={
+            <>
+              <button className={btn("danger")} onClick={() => void deleteTag()}>
+                <Trash2 size={15} />
+                Delete
+              </button>
+              <div className="flex gap-2">
+                <button className={btn("ghost")} onClick={closeTagModal}>Cancel</button>
+                <button className={btn("solid")} onClick={() => void renameTag()}>Save</button>
+              </div>
+            </>
+          }
+        >
+          <label className="flex flex-col gap-2">
+            <span className={labelClass}>Name</span>
+            <input
+              value={editingTag.name}
+              onChange={(event) => setEditingTag({ ...editingTag, name: event.target.value })}
+              onKeyDown={(event) => { if (event.key === "Enter") void renameTag(); }}
+              aria-label="Tag name"
+              autoFocus
+              className={inputClass}
+            />
+          </label>
+          {tagError ? <div className="mt-3"><Notice tone="bad">{tagError}</Notice></div> : null}
+        </Modal>
+      ) : null}
     </div>
   );
 }

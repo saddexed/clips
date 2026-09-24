@@ -3,6 +3,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo } from 'react';
 import { UploadCloud, X, CheckCircle2, AlertCircle, Plus, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { cn } from '@/lib/utils';
+import { btn } from '@/components/ui';
 
 type UploadStatus = 'pending' | 'uploading' | 'success' | 'error';
 
@@ -39,7 +41,7 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
   // 1. Process files and add to state
   const addFiles = useCallback((files: FileList | File[]) => {
     const fileArray = Array.from(files);
-    
+
     // Check for invalid files
     const invalidFiles = fileArray.filter(f => !f.type.startsWith('video/') && !f.type.startsWith('image/'));
     if (invalidFiles.length > 0) {
@@ -218,226 +220,146 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
         }
       `}} />
 
-      {/* The Global Drag Overlay -> Styled to resemble the Upload Manager */}
+      {/* The Global Drag Overlay */}
       {isDragging && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
-          backdropFilter: 'blur(4px)',
-          zIndex: 9999,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}>
-          <div className="glass-panel animate-in" style={{
-            width: '100%',
-            maxWidth: '600px',
-            borderRadius: 'var(--radius)',
-            padding: '4rem 2rem',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: '2px dashed var(--primary)'
-          }}>
-            <div style={{ background: 'var(--secondary)', padding: '1.5rem', borderRadius: '50%', marginBottom: '1.5rem' }}>
-              <UploadCloud size={48} className="text-white" />
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#0d1b2a]/55 p-4 backdrop-blur-sm">
+          <div className="animate-in flex w-full max-w-xl flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-line bg-surface px-8 py-16 text-center">
+            <div className="mb-3 grid size-20 place-items-center rounded-full bg-chip text-chip-ink">
+              <UploadCloud size={40} />
             </div>
-            <h3 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Drop files to upload</h3>
-            <p style={{ color: 'var(--muted-foreground)', marginTop: '0.25rem' }}>Files will be instantly queued for conversion.</p>
+            <h3 className="font-display text-2xl font-bold tracking-tight text-ink">Drop files to upload</h3>
+            <p className="text-muted">Files are queued for conversion as soon as they land.</p>
           </div>
         </div>
       )}
 
       {/* Hidden File Input for OS Selection */}
-      <input type="file" id="global-os-file-picker" multiple accept="video/*,image/*" style={{ display: 'none' }} onChange={(e) => {
+      <input type="file" id="global-os-file-picker" multiple accept="video/*,image/*" className="hidden" onChange={(e) => {
         if (e.target.files) addFiles(e.target.files);
         // Reset the input value so the same file can be selected again if needed
         e.target.value = '';
       }} />
 
       {/* The Floating Action Button (FAB) */}
-      <button 
+      <button
         onClick={() => document.getElementById('global-os-file-picker')?.click()}
-        style={{
-          position: 'fixed',
-          bottom: showMiniTracker ? '6rem' : '2rem', // shift up if mini tracker is visible
-          right: '2rem',
-          width: '64px',
-          height: '64px',
-          borderRadius: '50%',
-          background: 'var(--foreground)',
-          color: 'var(--background)',
-          border: 'none',
-          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          zIndex: 50,
-          transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-        }}
-        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05) translateY(-2px)'}
-        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1) translateY(0)'}
+        title="Upload files"
+        aria-label="Upload files"
+        className={cn(
+          'fixed right-6 z-50 grid size-14 cursor-pointer place-items-center rounded-full bg-solid text-solid-ink shadow-[0_16px_32px_-12px_rgba(13,27,42,0.55)] transition-all duration-300 hover:-translate-y-0.5',
+          showMiniTracker ? 'bottom-32' : 'bottom-6',
+        )}
       >
-        <Plus size={32} />
+        <Plus size={28} />
       </button>
 
       {/* The Minimized Progress Tracker */}
       {showMiniTracker && (
-        <div 
+        <button
+          type="button"
           onClick={() => setOverlayOpen(true)}
-          className="glass-panel animate-in"
-          style={{
-            position: 'fixed',
-            bottom: '1.5rem',
-            right: '1.5rem',
-            width: '320px',
-            padding: '1rem',
-            borderRadius: 'var(--radius)',
-            background: 'var(--card)',
-            border: '1px solid var(--border)',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
-            cursor: 'pointer',
-            zIndex: 49,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.75rem',
-            transition: 'transform 0.2s',
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-          onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+          className="animate-in fixed bottom-6 right-6 z-[49] flex w-80 cursor-pointer flex-col gap-3 rounded-2xl bg-surface p-4 text-left text-ink shadow-[0_20px_40px_-16px_rgba(13,27,42,0.5)] ring-1 ring-line-soft transition-transform hover:-translate-y-0.5"
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 500 }}>
+          <div className="flex w-full items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium">
               {activeUploads > 0 ? (
-                <Loader2 size={16} className="text-blue-400 animate-spin" />
+                <Loader2 size={16} className="animate-spin text-info" />
               ) : errorUploads > 0 ? (
-                <AlertCircle size={16} className="text-red-400" />
+                <AlertCircle size={16} className="text-bad" />
               ) : (
-                <CheckCircle2 size={16} className="text-green-400" />
+                <CheckCircle2 size={16} className="text-ok" />
               )}
-              <span style={{ fontSize: '0.9rem' }}>
-                {activeUploads > 0 ? `Uploading ${activeUploads} file${activeUploads > 1 ? 's' : ''}...` : 
+              <span>
+                {activeUploads > 0 ? `Uploading ${activeUploads} file${activeUploads > 1 ? 's' : ''}` :
                  errorUploads > 0 ? `${errorUploads} failed` : 'Uploads complete'}
               </span>
             </div>
-            {activeUploads > 0 && <span style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)' }}>{combinedProgress}%</span>}
+            {activeUploads > 0 && <span className="font-mono text-xs text-muted">{combinedProgress}%</span>}
           </div>
 
-          <div style={{ height: '4px', background: 'var(--secondary)', borderRadius: '999px', overflow: 'hidden' }}>
-            <div 
-              style={{ 
-                height: '100%', 
-                width: `${combinedProgress}%`, 
-                background: errorUploads > 0 && activeUploads === 0 ? '#f87171' : (activeUploads === 0 ? '#4ade80' : 'var(--foreground)'), 
-                transition: 'width 0.3s ease, background-color 0.3s' 
-              }} 
+          <div className="h-1 w-full overflow-hidden rounded-full bg-surface-2">
+            <div
+              className={cn(
+                'h-full transition-[width,background-color] duration-300',
+                errorUploads > 0 && activeUploads === 0 ? 'bg-bad' : activeUploads === 0 ? 'bg-ok' : 'bg-solid',
+              )}
+              style={{ width: `${combinedProgress}%` }}
             />
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>
+          <div className="flex w-full justify-between font-mono text-[0.6875rem] uppercase tracking-[0.08em] text-muted">
             <span>{completedUploads} / {uploads.length} finished</span>
-            <span>Click to view details</span>
+            <span>View details</span>
           </div>
-        </div>
+        </button>
       )}
 
       {/* The Active Uploads Overlay Pane */}
       {isOverlayOpen && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
-          backdropFilter: 'blur(4px)',
-          zIndex: 100,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }} onClick={() => setOverlayOpen(false)}>
-          <div 
-            className="glass-panel animate-in"
-            onClick={(e) => e.stopPropagation()} 
-            style={{
-              width: '100%',
-              maxWidth: '600px',
-              maxHeight: '80vh',
-              borderRadius: 'var(--radius)',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              background: 'var(--card)'
-            }}
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0d1b2a]/55 p-4 backdrop-blur-sm" onClick={() => setOverlayOpen(false)}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Uploads"
+            onClick={(e) => e.stopPropagation()}
+            className="animate-in flex max-h-[80vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-surface text-ink ring-1 ring-line-soft"
           >
-            <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Upload Manager</h3>
-              <button onClick={() => setOverlayOpen(false)} style={{ background: 'transparent', border: 'none', color: 'var(--muted-foreground)', cursor: 'pointer' }}>
-                <X size={20} />
+            <div className="flex items-center justify-between border-b border-line-soft px-6 py-4">
+              <h3 className="font-display text-lg font-bold tracking-tight">Uploads</h3>
+              <button onClick={() => setOverlayOpen(false)} className={btn('ghost', 'icon-sm')} aria-label="Close">
+                <X size={18} />
               </button>
             </div>
 
             {fileError && (
-              <div 
-                style={{ 
-                  backgroundColor: 'rgba(248, 113, 113, 0.1)', 
-                  color: '#f87171', 
-                  padding: '0.75rem 1.5rem', 
-                  borderBottom: '1px solid rgba(248, 113, 113, 0.2)',
-                  fontSize: '0.875rem',
-                  fontWeight: 500,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  animation: 'shake 0.4s cubic-bezier(.36,.07,.19,.97) both',
-                }}
+              <div
+                className="flex items-center gap-2 border-b border-bad/25 bg-bad/10 px-6 py-3 text-sm font-medium text-bad"
+                style={{ animation: 'shake 0.4s cubic-bezier(.36,.07,.19,.97) both' }}
               >
                 <AlertCircle size={16} />
                 {fileError}
               </div>
             )}
-            
-            <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
+
+            <div className="flex-1 overflow-y-auto p-6">
               {uploads.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--muted-foreground)' }}>
-                  <UploadCloud size={48} style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
-                  <p>No active uploads.</p>
-                  <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>Drag & drop files anywhere on the screen, or click the + button.</p>
+                <div className="flex flex-col items-center gap-2 py-12 text-center text-muted">
+                  <UploadCloud size={44} className="mb-2 opacity-60" />
+                  <p className="text-ink">No uploads yet.</p>
+                  <p className="text-sm">Drop files anywhere on the page, paste them, or use the + button.</p>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <ul className="flex flex-col gap-3">
                   {uploads.map(up => (
-                    <div key={up.id} style={{ background: 'var(--scene)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', alignItems: 'flex-start' }}>
-                        <div style={{ fontWeight: 500, wordBreak: 'break-all', paddingRight: '1rem' }}>{up.file.name}</div>
-                      </div>
-                      
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <li key={up.id} className="flex flex-col gap-2 rounded-xl bg-bg p-4 ring-1 ring-line-soft">
+                      <div className="break-all text-sm font-medium">{up.file.name}</div>
+
+                      <div className="flex items-center gap-4">
                         {up.status === 'success' ? (
-                          <CheckCircle2 size={20} color="#4ade80" />
+                          <CheckCircle2 size={18} className="text-ok" />
                         ) : up.status === 'error' ? (
-                          <AlertCircle size={20} color="#f87171" />
+                          <AlertCircle size={18} className="text-bad" />
                         ) : (
-                          <div style={{ flex: 1, height: '6px', background: 'var(--secondary)', borderRadius: '999px', overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: up.progress + '%', background: 'var(--foreground)', transition: 'width 0.3s ease' }} />
+                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
+                            <div className="h-full bg-solid transition-[width] duration-300" style={{ width: up.progress + '%' }} />
                           </div>
                         )}
-                        <span style={{ fontSize: '0.875rem', color: 'var(--muted-foreground)', width: '60px', textAlign: 'right' }}>
+                        <span className="ml-auto w-16 text-right font-mono text-xs text-muted">
                           {up.status === 'success' ? 'Done' : up.status === 'error' ? 'Failed' : (up.progress + '%')}
                         </span>
                       </div>
-                      {up.error && <div style={{ color: '#f87171', fontSize: '0.75rem', marginTop: '0.5rem' }}>{up.error}</div>}
-                    </div>
+                      {up.error && <div className="text-xs text-bad">{up.error}</div>}
+                    </li>
                   ))}
-                </div>
+                </ul>
               )}
             </div>
 
             {uploads.length > 0 && (
-              <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border)', background: 'rgba(9, 9, 11, 0.4)', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                <label className="btn-primary" style={{ margin: 0 }}>
-                  Select Files
-                  <input type="file" multiple accept="video/*,image/*" style={{ display: 'none' }} onChange={(e) => {
+              <div className="flex justify-end gap-3 border-t border-line-soft bg-bg/40 px-6 py-4">
+                <label className={btn('solid')}>
+                  Select files
+                  <input type="file" multiple accept="video/*,image/*" className="hidden" onChange={(e) => {
                     if (e.target.files) addFiles(e.target.files);
                     e.target.value = '';
                   }} />

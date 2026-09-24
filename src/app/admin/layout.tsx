@@ -1,8 +1,11 @@
 import Link from 'next/link';
-import { LayoutDashboard, ListVideo, Upload, Activity, Home, History, LogOut, Settings } from 'lucide-react';
+import { ExternalLink, LogOut } from 'lucide-react';
 import '../globals.css';
 import { GlobalUploadProvider } from '@/components/GlobalUploadProvider';
 import AdminReloadButton from '@/components/AdminReloadButton';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { btn } from '@/lib/ui-classes';
+import { AdminNav } from './AdminNav';
 
 export const metadata = {
   title: 'Clips Admin',
@@ -15,54 +18,36 @@ export default function AdminLayout({
 }) {
   return (
     <GlobalUploadProvider>
-      <div className="container-dash">
-        <div className="top-nav-container animate-in">
-          <nav className="top-nav">
-            <Link href="/admin" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none', color: 'var(--foreground)', paddingRight: '1rem', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
-              <div style={{ background: 'var(--foreground)', padding: '0.3rem', borderRadius: '0.3rem' }}>
-                <LayoutDashboard size={18} color="var(--background)" />
-              </div>
-              <span style={{ fontSize: '1rem', fontWeight: 600, letterSpacing: '-0.025em' }}>Clips Admin</span>
+      <div className="flex min-h-screen flex-col">
+        <header className="sticky top-0 z-30 border-b border-line-soft bg-bg/80 backdrop-blur-xl">
+          <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5 sm:px-6">
+            <Link href="/admin" className="flex items-baseline gap-1.5 font-display text-xl font-bold tracking-tight text-ink">
+              <span aria-hidden className="size-2 -translate-y-0.5 rounded-full bg-line" />
+              sd3xV
+              <span className="ml-1 font-mono text-[0.6875rem] font-normal uppercase tracking-[0.08em] text-muted">admin</span>
             </Link>
-            
-            <div style={{ display: 'flex', gap: '0.25rem' }}>
-              <NavLink href="/admin" icon={<ListVideo size={16} />} label="Manage" />
-              <NavLink href="/admin/tasks" icon={<Activity size={16} />} label="Queue" />
-              <NavLink href="/admin/history" icon={<History size={16} />} label="History" />
-              <NavLink href="/admin/settings" icon={<Settings size={16} />} label="Settings" />
+
+            <div className="order-3 w-full sm:order-none sm:w-auto sm:flex-1">
+              <AdminNav />
             </div>
 
-          </nav>
-          <div style={{ position: 'absolute', right: '2rem', top: '1rem', display: 'flex', gap: '0.75rem', zIndex: 50, pointerEvents: 'auto' }}>
-            <a href="/api/auth/logout" title="Log Out" style={{ background: 'var(--foreground)', color: 'var(--background)', padding: '0.75rem', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-              <LogOut size={20} />
-            </a>
-            <AdminReloadButton />
-            <Link href="/" title="Return to Main Site" style={{ background: 'var(--foreground)', color: 'var(--background)', padding: '0.75rem', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-              <Home size={20} />
-            </Link>
+            <div className="ml-auto flex items-center gap-1.5">
+              <AdminReloadButton />
+              <Link href="/" title="View site" aria-label="View site" className={btn('ghost', 'icon-sm')}>
+                <ExternalLink size={16} />
+              </Link>
+              <a href="/api/auth/logout" title="Log out" aria-label="Log out" className={btn('ghost', 'icon-sm')}>
+                <LogOut size={16} />
+              </a>
+              <ThemeToggle />
+            </div>
           </div>
-        </div>
-      
-        <main className="main-content">
-          <div className="page-container animate-in">
-            {children}
-          </div>
+        </header>
+
+        <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col px-4 pb-24 pt-8 sm:px-6">
+          {children}
         </main>
       </div>
     </GlobalUploadProvider>
-  );
-}
-
-function NavLink({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
-  // We'll use a simple style for unselected but in a real app we'd use usePathname from next/navigation
-  return (
-    <Link 
-      href={href}
-      className="btn-nav"
-    >
-      {icon}
-      {label}
-    </Link>
   );
 }

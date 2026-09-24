@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Shield, Loader2 } from 'lucide-react';
+import { Loader2, Lock } from 'lucide-react';
+import { btn, inputClass, labelClass } from '@/lib/ui-classes';
+import { cn } from '@/lib/utils';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,116 +30,68 @@ export default function LoginPage() {
         throw new Error('Invalid password');
       }
 
-      // Automatically redirect to the admin dashboard on success
       router.push('/admin');
-      router.refresh(); // Force refresh to clear any cached states
-    } catch (err: any) {
-      setError(err.message || 'Authentication failed');
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Authentication failed');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '1rem',
-      background: 'url(/grid.svg) var(--background)', // Optional texture if present in global css
-    }}>
-      <div className="glass-panel animate-in" style={{
-        padding: '3rem 2.5rem',
-        borderRadius: 'var(--radius)',
-        width: '100%',
-        maxWidth: '420px',
-        textAlign: 'center',
-        background: 'var(--card)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '1.5rem',
-        border: '1px solid var(--border)'
-      }}>
-        
-        <div style={{
-          width: '64px',
-          height: '64px',
-          margin: '0 auto',
-          background: 'rgba(255, 255, 255, 0.05)',
-          borderRadius: '50%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          border: '1px solid var(--border)'
-        }}>
-          <Shield size={32} color="var(--foreground)" />
+    <main className="flex min-h-dvh items-center justify-center px-4 py-16">
+      <div className="w-full max-w-sm">
+        <div className="mb-8 text-center">
+          <span className="font-display text-2xl font-semibold tracking-tight text-ink">
+            sd3xV
+          </span>
+          <span className="ml-2 font-mono text-[0.6875rem] uppercase tracking-[0.18em] text-muted">
+            admin
+          </span>
         </div>
 
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 600, letterSpacing: '-0.025em', marginBottom: '0.5rem' }}>
-            Admin Access
-          </h1>
-          <p style={{ color: 'var(--muted-foreground)', fontSize: '0.875rem' }}>
-            Enter your password to unlock the dashboard.
-          </p>
-        </div>
-
-        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div>
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (error) setError('');
-              }}
-              autoFocus
-              style={{
-                width: '100%',
-                padding: '0.75rem 1rem',
-                background: 'rgba(0,0,0,0.2)',
-                border: error ? '1px solid #ef4444' : '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-                color: 'var(--foreground)',
-                fontSize: '1rem',
-                outline: 'none',
-                transition: 'border-color 0.2s',
-              }}
-            />
+        <form
+          onSubmit={handleLogin}
+          className="flex flex-col gap-4 rounded-2xl bg-surface p-6 ring-1 ring-line-soft"
+        >
+          <div className="flex flex-col gap-2">
+            <label htmlFor="password" className={labelClass}>
+              Password
+            </label>
+            <div className="relative">
+              <Lock
+                size={15}
+                aria-hidden
+                className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted"
+              />
+              <input
+                id="password"
+                type="password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (error) setError('');
+                }}
+                autoFocus
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? 'password-error' : undefined}
+                className={cn(inputClass, 'pl-9', error && 'border-bad focus:border-bad')}
+              />
+            </div>
             {error && (
-               <p style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '0.5rem', textAlign: 'left' }}>
-                 {error}
-               </p>
+              <p id="password-error" role="alert" className="text-xs text-bad">
+                {error}
+              </p>
             )}
           </div>
 
-          <button
-            type="submit"
-            disabled={isLoading || !password}
-            style={{
-              width: '100%',
-              padding: '0.75rem',
-              background: 'var(--foreground)',
-              color: 'var(--background)',
-              border: 'none',
-              borderRadius: 'var(--radius)',
-              fontSize: '1rem',
-              fontWeight: 500,
-              cursor: isLoading || !password ? 'not-allowed' : 'pointer',
-              opacity: isLoading || !password ? 0.7 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'opacity 0.2s',
-            }}
-          >
-            {isLoading ? <Loader2 size={20} className="animate-spin" /> : 'Unlock Dashboard'}
+          <button type="submit" disabled={isLoading || !password} className={cn(btn('solid'), 'h-10 w-full')}>
+            {isLoading ? <Loader2 size={16} className="animate-spin" /> : 'Unlock dashboard'}
           </button>
         </form>
-
       </div>
-    </div>
+    </main>
   );
 }

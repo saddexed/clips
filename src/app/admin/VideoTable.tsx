@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect, useOptimistic, useTransition, useMemo, useCallback } from 'react';
-import { createPortal } from 'react-dom';
-import { Pencil, X, Save, AlertCircle, CheckCircle, Clock, Activity, AlertTriangle, Eye, EyeOff, Trash2, ArrowUpDown, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, History as HistoryIcon } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Pencil, X, Save, AlertCircle, CheckCircle, Clock, Activity, AlertTriangle, Eye, EyeOff, Trash2, ArrowUpDown, ChevronUp, ChevronDown, History as HistoryIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import SafeVideoPlayer from '@/components/SafeVideoPlayer';
 import SearchBar, { type SearchItem } from '@/components/SearchBar';
 import { mediaTypeLabel } from '@/lib/media';
+import { HistorySizeDetail, getActionDetails } from '@/lib/history-actions';
+import { cn } from '@/lib/utils';
+import { Modal, Pager, Segmented, StatusPill, btn, inputClass, labelClass, panelClass, tableClass, type Tone } from '@/components/ui';
 
 type Video = {
   id: string;
@@ -29,13 +31,21 @@ type Video = {
   isHidden: boolean;
 };
 
+const displayTagName = (name: string) => name.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+
+const formatDateTime = (value: Date | string) =>
+  new Date(value).toLocaleString(undefined, {
+    year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+
 export default function VideoTable({ initialVideos, page, total, totalPages, initialQuery = '', initialTags = [] }: { initialVideos: Video[]; page: number; total: number; totalPages: number; initialQuery?: string; initialTags?: string[] }) {
   const router = useRouter();
   // We use useMemo to force a re-render when initialVideos identity changes deeply
   // NextJS router.refresh() updates Server Component props, but React might hold old state
   // if we simply use useState.
   const [localVideos, setLocalVideos] = useState<Video[]>(initialVideos);
-  
+
   useEffect(() => {
     setLocalVideos(initialVideos);
   }, [initialVideos]);
@@ -43,7 +53,7 @@ export default function VideoTable({ initialVideos, page, total, totalPages, ini
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
   const [filteredIds, setFilteredIds] = useState<Set<string> | null>(null);
   const [tagToAddSignal, setTagToAddSignal] = useState<{ tag: string; seq: number } | null>(null);
-  
+
   const [sortField, setSortField] = useState<keyof Video>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
@@ -79,7 +89,7 @@ export default function VideoTable({ initialVideos, page, total, totalPages, ini
          valA = new Date(a.date || a.createdAt).getTime();
          valB = new Date(b.date || b.createdAt).getTime();
       }
-      
+
       if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
       if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
       return 0;
@@ -140,7 +150,7 @@ export default function VideoTable({ initialVideos, page, total, totalPages, ini
     setLocalVideos(localVideos.map(v => v.id === updatedVideo.id ? updatedVideo : v));
     setEditingVideo(null);
   };
-  
+
   const handleToggleVisibility = async (vid: Video) => {
     // Optimistic UI update
     setLocalVideos(localVideos.map(v => v.id === vid.id ? { ...v, isHidden: !v.isHidden } : v));
@@ -170,146 +180,124 @@ export default function VideoTable({ initialVideos, page, total, totalPages, ini
   };
 
   return (
-    <>
-      <div style={{ marginBottom: '1rem' }}>
-        <SearchBar
-          items={searchItems}
-          onResultsChange={handleSearchResultsChange}
-          placeholder="Filter table by title or tags..."
-          tagToAddSignal={tagToAddSignal}
-          initialQuery={initialQuery}
-          initialTags={initialTags}
-          onFiltersChange={handleFiltersChange}
-        />
-      </div>
+    <div className="flex flex-col gap-4">
+      <SearchBar
+        items={searchItems}
+        onResultsChange={handleSearchResultsChange}
+        placeholder="Filter by title or tags"
+        tagToAddSignal={tagToAddSignal}
+        initialQuery={initialQuery}
+        initialTags={initialTags}
+        onFiltersChange={handleFiltersChange}
+      />
 
-      <div className="glass-panel" style={{ borderRadius: 'var(--radius)', overflow: 'auto' }}>
+      <div className={cn(panelClass, 'overflow-x-auto')}>
         {visibleVideos.length === 0 ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--muted-foreground)' }}>
-            <p>No videos found in the library.</p>
+          <div className="px-6 py-16 text-center text-muted">
+            No clips match. Remove a tag or change the filter.
           </div>
         ) : (
-          <table className="data-table">
+          <table className={tableClass}>
             <thead>
               <tr>
-                <SortableHeader label="Title / File" field="title" currentField={sortField} currentOrder={sortOrder} onSort={handleSort} />
+                <SortableHeader label="Title" field="title" currentField={sortField} currentOrder={sortOrder} onSort={handleSort} />
                 <th>Tags</th>
-                <SortableHeader label="Duration / Res" field="duration" currentField={sortField} currentOrder={sortOrder} onSort={handleSort} />
+                <SortableHeader label="Length" field="duration" currentField={sortField} currentOrder={sortOrder} onSort={handleSort} />
                 <SortableHeader label="Size" field="originalSize" currentField={sortField} currentOrder={sortOrder} onSort={handleSort} />
-                <SortableHeader label="Original Date" field="date" currentField={sortField} currentOrder={sortOrder} onSort={handleSort} />
-                <th style={{ textAlign: 'center' }}>Status</th>
-                <th style={{ textAlign: 'center' }}>Actions</th>
-                <SortableHeader label="Uploaded At" field="uploadedAt" currentField={sortField} currentOrder={sortOrder} onSort={handleSort} />
+                <SortableHeader label="Date" field="date" currentField={sortField} currentOrder={sortOrder} onSort={handleSort} />
+                <SortableHeader label="Uploaded" field="uploadedAt" currentField={sortField} currentOrder={sortOrder} onSort={handleSort} />
+                <th>Status</th>
+                <th className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {visibleVideos.map((vid) => (
-                <tr 
-                  key={vid.id} 
-                  style={{ 
-                    transition: 'background-color 0.2s', 
-                    cursor: 'pointer',
-                    backgroundColor: vid.status === 'FAILED' ? 'rgba(239, 68, 68, 0.05)' : 'transparent'
-                  }}
+                <tr
+                  key={vid.id}
+                  className={cn(
+                    'cursor-pointer',
+                    vid.status === 'FAILED' ? 'bg-bad/5 hover:bg-bad/10' : 'hover:bg-chip/35',
+                  )}
                   onClick={() => setEditingVideo(vid)}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = vid.status === 'FAILED' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(255,255,255,0.05)'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = vid.status === 'FAILED' ? 'rgba(239, 68, 68, 0.05)' : 'transparent'}
                 >
-                  <td>
-                    <div style={{ fontWeight: 500, color: 'var(--foreground)' }}>
-                      {vid.title || vid.filename}
+                  <td className="max-w-[22rem]">
+                    <div className={cn('flex items-center gap-2 font-medium text-ink', vid.isHidden && 'text-muted')}>
+                      <span className="truncate">{vid.title || vid.filename}</span>
+                      {vid.isHidden ? <EyeOff size={13} className="shrink-0" aria-label="Hidden" /> : null}
                     </div>
-                    <div style={{ fontSize: '0.875rem', color: 'var(--muted-foreground)', marginTop: '0.25rem' }}>
-                      ID: {vid.id}
-                    </div>
+                    <div className="mt-0.5 truncate font-mono text-[0.6875rem] text-muted">{vid.id}</div>
                   </td>
                   <td>
                     {vid.tags && vid.tags.length > 0 ? (
-                      <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
-                        {vid.tags.map(t => (
-                          (() => {
-                            const displayTag = t.name.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
-                            return (
-                          <button
-                            key={t.name}
-                            type="button"
-                            className="search-tag-chip"
-                            style={{ padding: '0.1rem 0.45rem', fontSize: '0.72rem' }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setTagToAddSignal((prev) => ({
-                                tag: displayTag,
-                                seq: (prev?.seq || 0) + 1,
-                              }));
-                            }}
-                            title={`Filter by tag: ${displayTag}`}
-                          >
-                            #{displayTag}
-                          </button>
-                            );
-                          })()
-                        ))}
+                      <div className="flex max-w-[16rem] flex-wrap gap-1">
+                        {vid.tags.map(t => {
+                          const displayTag = displayTagName(t.name);
+                          return (
+                            <button
+                              key={t.name}
+                              type="button"
+                              className="cursor-pointer rounded-full bg-chip px-2 py-0.5 font-mono text-[0.6875rem] lowercase text-chip-ink transition-colors hover:ring-1 hover:ring-line"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setTagToAddSignal((prev) => ({
+                                  tag: displayTag,
+                                  seq: (prev?.seq || 0) + 1,
+                                }));
+                              }}
+                              title={`Filter by tag: ${displayTag}`}
+                            >
+                              #{displayTag}
+                            </button>
+                          );
+                        })}
                       </div>
                     ) : (
-                      <span style={{ color: 'var(--muted-foreground)', fontSize: '0.875rem' }}>None</span>
+                      <span className="text-muted">—</span>
                     )}
                   </td>
-                  <td>
-                    <div style={{ fontSize: '0.875rem', color: 'var(--foreground)' }}>
-                      {vid.duration ? `${Math.round(vid.duration)}s` : '-'}
-                    </div>
-                    <div style={{ fontSize: '0.875rem', color: 'var(--muted-foreground)' }}>
-                      {vid.width && vid.height ? `${vid.width}x${vid.height}` : ''}
-                    </div>
+                  <td className="whitespace-nowrap font-mono text-xs">
+                    <div className="text-ink">{vid.duration ? formatDuration(vid.duration) : '—'}</div>
+                    <div className="text-muted">{vid.width && vid.height ? `${vid.width}×${vid.height}` : ''}</div>
                   </td>
-                  <td style={{ color: 'var(--muted-foreground)' }}>
+                  <td className="whitespace-nowrap font-mono text-xs text-muted">
                     {getCompressionInfo(vid.originalSize, vid.processedSize).columnStr}
                   </td>
-                  <td style={{ color: 'var(--muted-foreground)' }}>
-                    {new Date(vid.date || vid.createdAt).toLocaleString(undefined, { 
-                      year: 'numeric', month: 'numeric', day: 'numeric', 
-                      hour: '2-digit', minute: '2-digit'
-                    })}
+                  <td className="whitespace-nowrap text-muted">
+                    {formatDateTime(vid.date || vid.createdAt)}
                   </td>
-                  <td style={{ textAlign: 'center' }} title={vid.status}>
-                    <StatusIcon status={vid.status} />
+                  <td className="whitespace-nowrap text-muted">
+                    {formatDateTime(vid.uploadedAt)}
                   </td>
-                  <td style={{ textAlign: 'center' }}>
-                    <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-                      <button 
+                  <td>
+                    <VideoStatus status={vid.status} />
+                  </td>
+                  <td>
+                    <div className="flex justify-end gap-1">
+                      <button
                         onClick={(e) => { e.stopPropagation(); handleToggleVisibility(vid); }}
-                        style={{ padding: '0.4rem', background: 'var(--secondary)', border: 'none', borderRadius: '0.375rem', color: 'var(--foreground)', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'background-color 0.2s' }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--secondary)'}
+                        className={btn('ghost', 'icon-sm')}
                         title={vid.isHidden ? "Hidden from Homepage (Click to Show)" : "Visible on Homepage (Click to Hide)"}
+                        aria-label={vid.isHidden ? 'Show on homepage' : 'Hide from homepage'}
                       >
-                        {vid.isHidden ? <EyeOff size={20} /> : <Eye size={20} />}
+                        {vid.isHidden ? <EyeOff size={17} /> : <Eye size={17} />}
                       </button>
-                      <button 
+                      <button
                         onClick={(e) => { e.stopPropagation(); setEditingVideo(vid); }}
-                        style={{ padding: '0.4rem', background: 'var(--secondary)', border: 'none', borderRadius: '0.375rem', color: 'var(--foreground)', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'background-color 0.2s' }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--secondary)'}
+                        className={btn('ghost', 'icon-sm')}
                         title="Edit metadata"
+                        aria-label="Edit"
                       >
-                        <Pencil size={20} />
+                        <Pencil size={17} />
                       </button>
-                      <button 
+                      <button
                         onClick={(e) => { e.stopPropagation(); handleDeleteInline(vid.id); }}
-                        style={{ padding: '0.4rem', background: 'rgba(239, 68, 68, 0.1)', border: 'none', borderRadius: '0.375rem', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'background-color 0.2s' }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.2)'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'}
+                        className={btn('danger', 'icon-sm')}
                         title="Move to Recycle Bin"
+                        aria-label="Move to trash"
                       >
-                        <Trash2 size={20} />
+                        <Trash2 size={17} />
                       </button>
                     </div>
-                  </td>
-                  <td style={{ color: 'var(--muted-foreground)' }}>
-                    {new Date(vid.uploadedAt).toLocaleString(undefined, { 
-                      year: 'numeric', month: 'numeric', day: 'numeric', 
-                      hour: '2-digit', minute: '2-digit'
-                    })}
                   </td>
                 </tr>
               ))}
@@ -317,17 +305,16 @@ export default function VideoTable({ initialVideos, page, total, totalPages, ini
           </table>
         )}
       </div>
-      {total > 0 && <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', marginTop: '1rem', alignItems: 'center' }}>
-        <button className="btn-secondary" disabled={page <= 1} onClick={() => router.push(pageUrl(page - 1))} title="Previous page" aria-label="Previous page"><ChevronLeft size={16} /></button>
-        <span>Page {page} of {totalPages} ({total} clips)</span>
-        <button className="btn-secondary" disabled={page >= totalPages} onClick={() => router.push(pageUrl(page + 1))} title="Next page" aria-label="Next page"><ChevronRight size={16} /></button>
-      </div>}
+
+      {total > 0 && (
+        <Pager page={page} totalPages={totalPages} onPage={(next) => router.push(pageUrl(next))} summary={`${total} clips`} />
+      )}
 
       {editingVideo && (
-        <EditVideoModal 
-          video={editingVideo} 
+        <EditVideoModal
+          video={editingVideo}
           allTags={allAvailableTags}
-          onClose={() => setEditingVideo(null)} 
+          onClose={() => setEditingVideo(null)}
           onSave={handleEditComplete}
           onDelete={(id) => {
             setLocalVideos(localVideos.filter(v => v.id !== id));
@@ -335,7 +322,7 @@ export default function VideoTable({ initialVideos, page, total, totalPages, ini
           }}
         />
       )}
-    </>
+    </div>
   );
 }
 
@@ -349,27 +336,27 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
       .filter(Boolean)
   );
   const [tagQuery, setTagQuery] = useState('');
-  
+
   const [activeTab, setActiveTab] = useState<'edit' | 'metadata' | 'history'>('edit');
   const [history, setHistory] = useState<any[]>([]);
-  
+
   // Infer active mode from the value of video.date
   const activeParsedDate = new Date(video.date || video.createdAt).getTime();
   const originalParsedDate = new Date(video.createdAt).getTime();
   const uploadParsedDate = new Date(video.uploadedAt).getTime();
-  
+
   const isUploadMode = activeParsedDate === uploadParsedDate && activeParsedDate !== originalParsedDate;
   const isOriginalMode = activeParsedDate === originalParsedDate;
-  
+
   const [dateMode, setDateMode] = useState<'original' | 'upload' | 'custom'>(
-    isUploadMode ? 'upload' : 
-    isOriginalMode ? 'original' : 
+    isUploadMode ? 'upload' :
+    isOriginalMode ? 'original' :
     'custom'
   );
 
   // Format dates for datetime-local input
   const pad = (n: number) => n.toString().padStart(2, '0');
-  
+
   const initialCustomDate = new Date(video.date || video.createdAt);
   const initialCustomDateStr = `${initialCustomDate.getFullYear()}-${pad(initialCustomDate.getMonth() + 1)}-${pad(initialCustomDate.getDate())}T${pad(initialCustomDate.getHours())}:${pad(initialCustomDate.getMinutes())}`;
   const [customDate, setCustomDate] = useState(initialCustomDateStr);
@@ -384,7 +371,6 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
 
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
-  const [mounted, setMounted] = useState(false);
 
   const suggestedTags = useMemo(() => {
     const q = normalizeTag(tagQuery);
@@ -404,10 +390,6 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
   };
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
     if (activeTab !== 'history') return;
     fetch(`/api/history?videoId=${encodeURIComponent(video.id)}`)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error('Failed to load history')))
@@ -422,9 +404,9 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
     try {
       const tagsArray = selectedTags;
 
-      const payloadDate = 
-        dateMode === 'original' ? video.createdAt 
-        : dateMode === 'upload' ? video.uploadedAt 
+      const payloadDate =
+        dateMode === 'original' ? video.createdAt
+        : dateMode === 'upload' ? video.uploadedAt
         : new Date(customDate);
 
       const res = await fetch(`/api/videos/${video.id}`, {
@@ -438,7 +420,7 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
       });
 
       if (!res.ok) throw new Error('Failed to update video');
-      
+
       const { video: updatedVideo } = await res.json();
       onSave({ ...video, ...updatedVideo });
     } catch (err: any) {
@@ -461,163 +443,110 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
     }
   };
 
-  if (!mounted) return null;
+  const metadataRows: [string, string][] = [
+    ['ID', video.id],
+    ['Type', video.mediaType === 'IMAGE' ? 'image' : mediaTypeLabel(video.activeMetadata || video.originalMetadata)],
+    ['Duration', video.duration !== null ? `${video.duration}s` : 'N/A'],
+    ['Dimensions', video.width && video.height ? `${video.width}×${video.height}` : 'N/A'],
+    ['Size', getCompressionInfo(video.originalSize, video.processedSize).editStr],
+    ['Date', new Date(video.createdAt).toLocaleString()],
+  ];
 
-  return createPortal(
-    <div 
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0, 0, 0, 0.6)',
-        backdropFilter: 'blur(4px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 50
-      }}
+  return (
+    <Modal
+      title={`Edit ${video.mediaType === 'IMAGE' ? 'image' : 'video'}`}
+      onClose={onClose}
+      className="max-w-6xl"
+      footer={
+        <>
+          <button className={btn('danger')} onClick={handleDelete} disabled={isSaving}>
+            <Trash2 size={16} />
+            Delete
+          </button>
+          <button className={btn('solid')} onClick={handleSave} disabled={isSaving}>
+            <Save size={16} />
+            {isSaving ? 'Saving…' : 'Save changes'}
+          </button>
+        </>
+      }
     >
-      <div 
-        className="glass-panel animate-in" 
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: '100%',
-          maxWidth: '1200px',
-          maxHeight: '90vh',
-          overflowY: 'auto',
-          borderRadius: 'var(--radius)',
-          padding: '2rem',
-          position: 'relative'
-        }}
-      >
-        <button 
-          onClick={onClose}
-          style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', background: 'transparent', border: 'none', color: 'var(--muted-foreground)', cursor: 'pointer' }}
-        >
-          <X size={20} />
-        </button>
-        
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '1.5rem' }}>
-          Edit {video.mediaType === 'IMAGE' ? 'Image' : 'Video'} Info
-        </h2>
-
+      <div className="flex flex-col gap-5">
         {error && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#f87171', background: 'rgba(239, 68, 68, 0.1)', padding: '1rem', borderRadius: 'var(--radius)', marginBottom: '1.5rem' }}>
-            <AlertCircle size={18} />
-            <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>{error}</span>
+          <div className="flex items-center gap-2 rounded-xl bg-bad/10 px-4 py-3 text-sm font-medium text-bad">
+            <AlertCircle size={16} />
+            {error}
           </div>
         )}
 
-        {/* Tab Navigation */}
-        <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem' }}>
-          <button
-            type="button"
-            onClick={() => setActiveTab('edit')}
-            style={{
-              padding: '0.75rem 1.5rem',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: activeTab === 'edit' ? '2px solid var(--foreground)' : '2px solid transparent',
-              color: activeTab === 'edit' ? 'var(--foreground)' : 'var(--muted-foreground)',
-              fontWeight: activeTab === 'edit' ? 600 : 400,
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('metadata')}
-            style={{
-              padding: '0.75rem 1.5rem',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: activeTab === 'metadata' ? '2px solid var(--foreground)' : '2px solid transparent',
-              color: activeTab === 'metadata' ? 'var(--foreground)' : 'var(--muted-foreground)',
-              fontWeight: activeTab === 'metadata' ? 600 : 400,
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            Metadata
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('history')}
-            style={{
-              padding: '0.75rem 1.5rem', background: 'transparent', border: 'none',
-              borderBottom: activeTab === 'history' ? '2px solid var(--foreground)' : '2px solid transparent',
-              color: activeTab === 'history' ? 'var(--foreground)' : 'var(--muted-foreground)',
-              fontWeight: activeTab === 'history' ? 600 : 400, cursor: 'pointer', transition: 'all 0.2s'
-            }}
-          >
-            <HistoryIcon size={15} style={{ verticalAlign: 'middle', marginRight: '0.35rem' }} />History
-          </button>
-        </div>
+        <Segmented
+          className="self-start"
+          value={activeTab}
+          onChange={setActiveTab}
+          options={[
+            { value: 'edit', label: 'Edit' },
+            { value: 'metadata', label: 'Metadata' },
+            { value: 'history', label: <><HistoryIcon size={14} />History</> },
+          ]}
+        />
 
         {activeTab === 'edit' && (
-          <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', marginBottom: '2rem' }}>
-            {/* Left Column: Player & Metadata */}
-            <div style={{ flex: '2 1 500px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
+            <div className="overflow-hidden rounded-xl bg-black ring-1 ring-line-soft">
               {video.activePath ? (
                 video.mediaType === 'IMAGE' ? (
-                  <div style={{ width: '100%', background: '#000', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                    <img 
-                      src={`/v/${video.id}`} 
-                      alt={video.originalMetadata?.filename || video.title}
-                      style={{ width: '100%', maxHeight: '600px', objectFit: 'contain', display: 'block' }}
-                    />
-                  </div>
+                  <img
+                    src={`/v/${video.id}`}
+                    alt={video.originalMetadata?.filename || video.title}
+                    className="block max-h-[600px] w-full object-contain"
+                  />
                 ) : (
-                  <SafeVideoPlayer 
-                    src={`/v/${video.id}`} 
+                  <SafeVideoPlayer
+                    src={`/v/${video.id}`}
                   />
                 )
               ) : (
-                <div style={{ width: '100%', aspectRatio: '16/9', background: 'var(--card)', borderRadius: 'var(--radius)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: video.status === 'FAILED' ? '#ef4444' : 'var(--muted-foreground)', gap: '1rem', border: video.status === 'FAILED' ? '1px solid rgba(239,68,68,0.3)' : '1px solid var(--border)' }}>
+                <div className={cn('flex aspect-video w-full flex-col items-center justify-center gap-2 bg-surface-2 text-center', video.status === 'FAILED' ? 'text-bad' : 'text-muted')}>
                   {video.status === 'FAILED' ? (
                      <>
-                       <AlertTriangle size={32} />
-                       <span style={{ fontWeight: 500 }}>Processing Failed</span>
-                       <span style={{ fontSize: '0.875rem', opacity: 0.8 }}>This media could not be processed.</span>
+                       <AlertTriangle size={30} />
+                       <span className="font-medium">Processing failed</span>
+                       <span className="text-sm opacity-80">This media could not be processed.</span>
                      </>
                   ) : (
                      <>
-                       <Activity size={32} className="text-blue-400" />
-                       <span style={{ fontWeight: 500 }}>Currently Processing</span>
-                       <span style={{ fontSize: '0.875rem', opacity: 0.8 }}>Please wait for the background worker.</span>
+                       <Activity size={30} className="text-info" />
+                       <span className="font-medium text-ink">Processing</span>
+                       <span className="text-sm">The background worker hasn’t finished this file yet.</span>
                      </>
                   )}
                 </div>
               )}
-              
             </div>
 
-            {/* Right Column: Editable Fields */}
-            <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>Title</label>
-                <input 
-                  type="text" 
+            <div className="flex flex-col gap-5">
+              <label className="flex flex-col gap-2">
+                <span className={labelClass}>Title</span>
+                <input
+                  type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  style={{ width: '100%', padding: '0.75rem', background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--foreground)' }}
+                  className={inputClass}
                 />
-              </div>
+              </label>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>Tags</label>
-                <div className="search-inline-shell">
+              <div className="flex flex-col gap-2">
+                <span className={labelClass}>Tags</span>
+                <div className="flex min-h-10 flex-wrap items-center gap-1.5 rounded-xl border border-line-soft bg-bg px-2 py-1.5 transition-colors focus-within:border-line">
                   {selectedTags.map((tag) => (
                     <button
                       key={tag}
                       type="button"
-                      className="search-tag-chip search-tag-chip--selected"
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-solid px-2.5 py-0.5 font-mono text-xs lowercase text-solid-ink hover:opacity-85"
                       onClick={() => removeTag(tag)}
                       title="Remove tag"
+                      aria-label={`Remove tag ${tag}`}
                     >
-                      <X size={12} />
+                      <X size={11} />
                       {tag}
                     </button>
                   ))}
@@ -645,100 +574,45 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
                         setSelectedTags((prev) => prev.slice(0, -1));
                       }
                     }}
-                    placeholder="Type tag and press Enter/Tab"
-                    className="search-inline-input"
+                    placeholder="Add a tag, then Enter"
+                    aria-label="Add tag"
+                    className="h-7 min-w-[8rem] flex-1 bg-transparent px-1 text-sm text-ink outline-none placeholder:text-muted focus-visible:outline-none"
                   />
-
-                  {suggestedTags.length > 0 ? (
-                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginLeft: 'auto' }}>
-                      {suggestedTags.slice(0, 3).map((tag) => (
-                        <button
-                          key={tag}
-                          type="button"
-                          className="search-tag-chip"
-                          onClick={() => addTag(tag)}
-                        >
-                          {tag}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
                 </div>
+                {suggestedTags.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {suggestedTags.slice(0, 3).map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        className="cursor-pointer rounded-full bg-chip px-2.5 py-0.5 font-mono text-xs lowercase text-chip-ink hover:ring-1 hover:ring-line"
+                        onClick={() => addTag(tag)}
+                      >
+                        + {tag}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>Date Mode</label>
-                
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', fontSize: '0.875rem' }}>
-                  <button
-                    type="button"
-                    onClick={() => setDateMode('original')}
-                    style={{
-                      flex: 1,
-                      padding: '0.5rem 0.2rem',
-                      borderRadius: 'var(--radius)',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontWeight: dateMode === 'original' ? 600 : 400,
-                      background: dateMode === 'original' ? '#55c4fa' : 'var(--secondary)',
-                      color: dateMode === 'original' ? '#000' : 'var(--muted-foreground)',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    Original
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDateMode('upload')}
-                    style={{
-                      flex: 1,
-                      padding: '0.5rem 0.2rem',
-                      borderRadius: 'var(--radius)',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontWeight: dateMode === 'upload' ? 600 : 400,
-                      background: dateMode === 'upload' ? '#55c4fa' : 'var(--secondary)',
-                      color: dateMode === 'upload' ? '#000' : 'var(--muted-foreground)',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    Upload
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDateMode('custom')}
-                    style={{
-                      flex: 1,
-                      padding: '0.5rem 0.2rem',
-                      borderRadius: 'var(--radius)',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontWeight: dateMode === 'custom' ? 600 : 400,
-                      background: dateMode === 'custom' ? '#55c4fa' : 'var(--secondary)',
-                      color: dateMode === 'custom' ? '#000' : 'var(--muted-foreground)',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    Custom
-                  </button>
-                </div>
-
-                <input 
-                  type="datetime-local" 
+              <div className="flex flex-col gap-2">
+                <span className={labelClass}>Date</span>
+                <Segmented
+                  value={dateMode}
+                  onChange={setDateMode}
+                  options={[
+                    { value: 'original', label: 'Original' },
+                    { value: 'upload', label: 'Upload' },
+                    { value: 'custom', label: 'Custom' },
+                  ]}
+                />
+                <input
+                  type="datetime-local"
                   value={displayDate}
                   onChange={(e) => setCustomDate(e.target.value)}
                   disabled={dateMode !== 'custom'}
-                  style={{ 
-                    width: '100%', 
-                    padding: '0.75rem', 
-                    background: dateMode === 'custom' ? 'var(--background)' : 'var(--secondary)', 
-                    border: '1px solid var(--border)', 
-                    borderRadius: 'var(--radius)', 
-                    color: dateMode === 'custom' ? 'var(--foreground)' : 'var(--muted-foreground)', 
-                    colorScheme: 'dark',
-                    cursor: dateMode === 'custom' ? 'text' : 'not-allowed',
-                    opacity: dateMode === 'custom' ? 1 : 0.7
-                  }}
+                  aria-label="Date"
+                  className={cn(inputClass, 'font-mono')}
                 />
               </div>
             </div>
@@ -746,20 +620,20 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
         )}
 
         {activeTab === 'metadata' && (
-          <div style={{ marginBottom: '2rem' }}>
-            <div style={{ background: 'var(--secondary)', padding: '1.5rem', borderRadius: 'var(--radius)', overflowX: 'auto', maxHeight: '600px', fontSize: '0.875rem', lineHeight: '1.8', wordBreak: 'break-all' }}>
-              <strong>ID:</strong> {video.id}<br/>
-              <strong>Type:</strong> {video.mediaType === 'IMAGE' ? 'image' : mediaTypeLabel(video.activeMetadata || video.originalMetadata)}<br/>
-              <strong>Duration:</strong> {video.duration !== null ? `${video.duration}s` : 'N/A'}<br/>
-              <strong>Dimensions:</strong> {video.width && video.height ? `${video.width}x${video.height}` : 'N/A'}<br/>
-              <strong>Size:</strong> {getCompressionInfo(video.originalSize, video.processedSize).editStr}<br/>
-              <strong>Date:</strong> {new Date(video.createdAt).toLocaleString()}<br/>
-            </div>
-            
+          <div className="flex flex-col gap-4">
+            <dl className="grid gap-x-6 gap-y-3 rounded-xl bg-bg p-5 ring-1 ring-line-soft sm:grid-cols-[8rem_1fr]">
+              {metadataRows.map(([label, value]) => (
+                <div key={label} className="contents">
+                  <dt className={labelClass}>{label}</dt>
+                  <dd className="break-all font-mono text-sm text-ink">{value}</dd>
+                </div>
+              ))}
+            </dl>
+
             {video.originalMetadata && (
-              <div style={{ marginTop: '1rem', background: '#09090b', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.5rem', overflowX: 'auto', maxHeight: '400px' }}>
-                <h4 style={{ marginBottom: '1rem', fontSize: '0.875rem', fontWeight: 600, color: 'var(--muted-foreground)' }}>Raw JSON Metadata</h4>
-                <pre style={{ color: '#d4d4d8', fontSize: '0.875rem', fontFamily: 'var(--font-mono)' }}>
+              <div className="flex flex-col gap-2">
+                <span className={labelClass}>Raw metadata</span>
+                <pre className="max-h-[400px] overflow-auto rounded-xl bg-[#0d1b2a] p-5 font-mono text-xs leading-relaxed text-[#e0e1dd]">
                   {JSON.stringify(video.originalMetadata, (key, value) => typeof value === 'bigint' ? value.toString() : value, 2)}
                 </pre>
               </div>
@@ -768,64 +642,68 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
         )}
 
         {activeTab === 'history' && (
-          <div style={{ marginBottom: '2rem' }}>
-            {history.length === 0 ? <p style={{ color: 'var(--muted-foreground)' }}>No history available.</p> : (
-              <div style={{ overflowX: 'auto' }}>
-                <table className="data-table" style={{ width: '100%', minWidth: '480px', tableLayout: 'fixed' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ width: '38%', textAlign: 'left' }}>Action</th>
-                      <th style={{ width: '22%', textAlign: 'left' }}>Status</th>
-                      <th style={{ width: '40%', textAlign: 'left' }}>Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {history.map((event) => (
-                      <tr key={event.id}>
-                        <td style={{ padding: '0.65rem 1rem', textAlign: 'left' }}>{event.jobType}</td>
-                        <td style={{ padding: '0.65rem 1rem', textAlign: 'left', color: 'var(--muted-foreground)' }}>{event.status}</td>
-                        <td style={{ padding: '0.65rem 1rem', textAlign: 'left', color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>
-                          {new Date(event.completedAt || event.startedAt).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+          <div>
+            {history.length === 0 ? <p className="py-8 text-center text-muted">No history for this clip yet.</p> : (
+              <ol className="flex flex-col">
+                {history.map((event, index) => {
+                  const { icon, label, tone } = getActionDetails(event, 13);
+                  const failed = event.status === 'FAILED';
+                  const isLast = index === history.length - 1;
+                  return (
+                    <li key={event.id} className="grid grid-cols-[auto_1.5rem_1fr] gap-x-3">
+                      <time className="whitespace-nowrap pt-1 text-right font-mono text-xs text-muted">
+                        {new Date(event.completedAt || event.startedAt).toLocaleString('en-GB', {
+                          day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+                        })}
+                      </time>
+                      <div className="flex flex-col items-center">
+                        <span className={cn('mt-1.5 size-2.5 shrink-0 rounded-full ring-4 ring-surface', failed ? 'bg-bad' : 'bg-line')} />
+                        {!isLast && <span className="w-px flex-1 bg-line-soft" />}
+                      </div>
+                      <div className={cn('flex flex-col items-start gap-1', !isLast && 'pb-5')}>
+                        <div className="flex items-center gap-2">
+                          <StatusPill tone={tone} icon={icon}>{label}</StatusPill>
+                          {event.status !== 'COMPLETED' && (
+                            <StatusPill tone={failed ? 'bad' : 'neutral'} icon={failed ? <AlertTriangle size={12} /> : undefined}>
+                              {event.status.charAt(0) + event.status.slice(1).toLowerCase()}
+                            </StatusPill>
+                          )}
+                        </div>
+                        <HistorySizeDetail job={event} />
+                        {failed && event.errorMessage ? <div className="text-xs text-bad">{event.errorMessage}</div> : null}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
             )}
           </div>
         )}
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
-          <button 
-            className="btn-secondary" 
-            style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }} 
-            onClick={handleDelete} 
-            disabled={isSaving}
-          >
-            Delete
-          </button>
-          
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <button className="btn-primary" onClick={handleSave} disabled={isSaving}>
-              <Save size={18} />
-              {isSaving ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
-        </div>
       </div>
-    </div>,
-    document.body
+    </Modal>
   );
 }
 
-function StatusIcon({ status }: { status: string }) {
-  switch (status) {
-    case 'COMPLETED': return <CheckCircle size={20} color="#4ade80" />;
-    case 'FAILED': return <AlertTriangle size={20} color="#f87171" />;
-    case 'PROCESSING': return <Activity size={20} color="#60a5fa" />;
-    default: return <Clock size={20} color="#94a3b8" />;
-  }
+const VIDEO_STATUS: Record<string, { tone: Tone; label: string; icon: typeof CheckCircle }> = {
+  COMPLETED: { tone: 'ok', label: 'Ready', icon: CheckCircle },
+  FAILED: { tone: 'bad', label: 'Failed', icon: AlertTriangle },
+  PROCESSING: { tone: 'info', label: 'Processing', icon: Activity },
+};
+
+function VideoStatus({ status }: { status: string }) {
+  const config = VIDEO_STATUS[status] || { tone: 'neutral' as Tone, label: status.charAt(0) + status.slice(1).toLowerCase(), icon: Clock };
+  const Icon = config.icon;
+  return (
+    <span title={status}>
+      <StatusPill tone={config.tone} icon={<Icon size={12} />}>{config.label}</StatusPill>
+    </span>
+  );
+}
+
+function formatDuration(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 function formatBytes(bytes: number | bigint | null) {
@@ -841,34 +719,34 @@ function formatBytes(bytes: number | bigint | null) {
 function getCompressionInfo(originalSize: number | bigint, processedSize: number | bigint | null) {
   const orig = Number(originalSize);
   const proc = processedSize ? Number(processedSize) : orig;
-  
+
   const ratio = orig > 0 ? Math.round((proc / orig) * 100) : 100;
-  
-  const editStr = (!processedSize || proc === orig) 
-      ? `${formatBytes(orig)}(100%)` 
-      : `${formatBytes(orig)}->${formatBytes(proc)}(${ratio}%)`;
-      
-  const columnStr = `${formatBytes(proc)}(${ratio}%)`;
-  
+
+  const editStr = (!processedSize || proc === orig)
+      ? `${formatBytes(orig)} (100%)`
+      : `${formatBytes(orig)} → ${formatBytes(proc)} (${ratio}%)`;
+
+  const columnStr = `${formatBytes(proc)} (${ratio}%)`;
+
   return { columnStr, editStr };
 }
 
 function SortableHeader({ label, field, currentField, currentOrder, onSort }: { label: string, field: string, currentField: string, currentOrder: 'asc' | 'desc', onSort: (field: any) => void }) {
+  const active = currentField === field;
   return (
-    <th 
-      style={{ cursor: 'pointer', userSelect: 'none', transition: 'color 0.2s' }}
-      onClick={() => onSort(field)}
-      onMouseEnter={(e) => e.currentTarget.style.color = 'var(--foreground)'}
-      onMouseLeave={(e) => e.currentTarget.style.color = currentField === field ? 'var(--foreground)' : 'var(--muted-foreground)'}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: currentField === field ? 'var(--foreground)' : 'currentColor' }}>
+    <th aria-sort={active ? (currentOrder === 'asc' ? 'ascending' : 'descending') : undefined}>
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        className={cn('inline-flex cursor-pointer items-center gap-1.5 uppercase transition-colors hover:text-ink', active && 'text-ink')}
+      >
         {label}
-        {currentField === field ? (
-          currentOrder === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
+        {active ? (
+          currentOrder === 'asc' ? <ChevronUp size={13} /> : <ChevronDown size={13} />
         ) : (
-          <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
+          <ArrowUpDown size={13} className="opacity-40" />
         )}
-      </div>
+      </button>
     </th>
   );
 }

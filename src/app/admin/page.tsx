@@ -1,5 +1,6 @@
 import { listVideosPage } from "../../lib/database";
 import VideoTable from "./VideoTable";
+import { PageHeader } from "@/components/ui";
 
 export const dynamic = "force-dynamic"; // Ensures this page isn't statically cached, always showing fresh DB state
 
@@ -12,31 +13,8 @@ export default async function AdminManagePage({
   const videos = listVideosPage({ page: Number(params?.page || 1), limit: 25, query: params?.q, tags: params?.tag?.split(",") });
 
   return (
-    <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "2rem",
-        }}
-      >
-        <div>
-          <h1
-            style={{
-              fontSize: "1.875rem",
-              fontWeight: 600,
-              letterSpacing: "-0.025em",
-              marginBottom: "0.25rem",
-            }}
-          >
-            Media Library
-          </h1>
-          <p style={{ color: "var(--muted-foreground)" }}>
-            Manage your uploaded clips and their processing statuses.
-          </p>
-        </div>
-      </div>
+    <div className="flex flex-col gap-6">
+      <PageHeader title="Media library" />
 
       <VideoTable initialVideos={videos.items} page={videos.page} total={videos.total} totalPages={videos.totalPages} initialQuery={params?.q || ""} initialTags={params?.tag?.split(",").filter(Boolean) || []} />
     </div>
