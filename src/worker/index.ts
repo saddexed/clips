@@ -15,11 +15,10 @@ import {
   killActiveFfmpegProcess,
   transcodeToWebM,
 } from "../lib/ffmpeg.js";
-import { isAdoptableWebm } from "../lib/media.js";
+import { isAdoptableWebm, normalizeMediaMetadata } from "../lib/media.js";
 import {
   getDataPath,
   resolveStoredPath,
-  toStoredPath,
 } from "../lib/paths.js";
 import sharp from "sharp";
 
@@ -91,30 +90,35 @@ async function processVideo(job: QueueJob) {
 
       const existingMeta =
         (videoRecord.originalMetadata as Record<string, unknown>) || {};
-      const originalMetadata = {
-        ...existingMeta,
-        format: metadata.format,
+      const originalMetadata = normalizeMediaMetadata({
+        id: videoId,
+        filename,
+        hash: videoRecord.sha256Hash || "",
+        contentType:
+          typeof existingMeta.contentType === "string"
+            ? existingMeta.contentType
+            : "image/*",
         size: originalStats.size,
+        createdAt: oldestDate || videoRecord.createdAt,
+        uploadedAt: videoRecord.uploadedAt,
+        raw: { format: { format_name: metadata.format } },
         width: metadata.width,
         height: metadata.height,
-      };
+      });
 
       updateVideo(videoId, {
         width: metadata.width,
         height: metadata.height,
         createdAt: oldestDate,
-        date: oldestDate,
         originalMetadata,
-        activeMetadata: originalMetadata,
         activeSize: originalStats.size,
       });
 
-      const baseName = path.parse(filename).name;
       console.log(`[Worker] Attempting WebP conversion for ${videoId}`);
       const processedDir = path.join(DATA_PATH, "processed");
       await mkdir(processedDir, { recursive: true });
 
-      const outputFilename = `${baseName}-${crypto.randomUUID()}.webp`;
+      const outputFilename = `${videoId}.webp`;
       const outputPath = path.join(processedDir, outputFilename);
       await sharp(filePath).webp({ lossless: true }).toFile(outputPath);
 
@@ -124,9 +128,6 @@ async function processVideo(job: QueueJob) {
 
       let finalPath: string;
       let finalSize: number;
-      let processedPath: string | null = null;
-      let processedSize = 0;
-      let activeMetadata: Record<string, unknown> = originalMetadata;
 
       if (webpStats.size > originalStats.size) {
         console.log(
@@ -143,25 +144,12 @@ async function processVideo(job: QueueJob) {
         finalPath = path.join(vaultDir, `${videoId}.webp`);
         await rename(outputPath, finalPath);
         finalSize = webpStats.size;
-        processedPath = finalPath;
-        processedSize = webpStats.size;
-        activeMetadata = {
-          ...originalMetadata,
-          format: "webp",
-          size: webpStats.size,
-        };
       }
 
       updateQueueProgress(job.id, 100);
       updateVideo(videoId, {
         status: "COMPLETED",
-        originalPath:
-          processedPath === null ? toStoredPath(finalPath) : videoRecord.originalPath,
-        processedPath: processedPath ? toStoredPath(processedPath) : null,
-        processedSize,
-        activePath: toStoredPath(finalPath),
         activeSize: finalSize,
-        activeMetadata,
         originalMetadata,
       });
 
@@ -182,19 +170,34 @@ async function processVideo(job: QueueJob) {
 
       const existingMeta =
         (videoRecord.originalMetadata as Record<string, unknown>) || {};
-      const originalMetadata = {
-        ...existingMeta,
-        ...(metadata.raw as object),
-      };
+      const originalMetadata = normalizeMediaMetadata({
+        id: videoId,
+        filename,
+        hash: videoRecord.sha256Hash || "",
+        contentType:
+          typeof existingMeta.contentType === "string"
+            ? existingMeta.contentType
+            : "video/*",
+        size: originalStats.size,
+        createdAt: oldestDate || videoRecord.createdAt,
+        uploadedAt: videoRecord.uploadedAt,
+        raw: metadata.raw,
+        width: metadata.width,
+        height: metadata.height,
+        duration: metadata.duration,
+        videoCodec: metadata.videoCodec,
+        bitRate:
+          typeof metadata.raw?.format?.bit_rate === "string"
+            ? Number(metadata.raw.format.bit_rate)
+            : undefined,
+      });
 
       updateVideo(videoId, {
         duration: metadata.duration,
         width: metadata.width,
         height: metadata.height,
         createdAt: oldestDate,
-        date: oldestDate,
         originalMetadata,
-        activeMetadata: originalMetadata,
         activeSize: originalStats.size,
       });
 
@@ -206,17 +209,10 @@ async function processVideo(job: QueueJob) {
           await rename(filePath, finalPath);
         }
         const finalStats = await stat(finalPath);
-        const storedFinalPath = toStoredPath(finalPath);
-
         updateVideo(videoId, {
           status: "COMPLETED",
-          originalPath: storedFinalPath,
-          processedPath: storedFinalPath,
-          processedSize: finalStats.size,
-          activePath: storedFinalPath,
           activeSize: finalStats.size,
           originalMetadata,
-          activeMetadata: originalMetadata,
         });
         updateQueueProgress(job.id, 100);
         createJobHistory({
@@ -245,8 +241,6 @@ async function processVideo(job: QueueJob) {
         throw new Error("ffmpeg is required to process this video");
       }
 
-      const baseName = path.parse(filename).name;
-
       // 3. Mark Transcode start time so it sits correctly chronologically
       const transcodeStartedAt = new Date();
 
@@ -254,7 +248,7 @@ async function processVideo(job: QueueJob) {
       const processedDir = path.join(DATA_PATH, "processed");
       await mkdir(processedDir, { recursive: true });
 
-      const outputFilename = `${baseName}-${crypto.randomUUID()}.webm`;
+      const outputFilename = `${videoId}.webm`;
       const outputPath = path.join(processedDir, outputFilename);
 
       let transcoded = false;
@@ -317,10 +311,7 @@ async function processVideo(job: QueueJob) {
       const transcodedStats = await stat(outputPath);
       let finalPath: string;
       let finalSize: number;
-      let processedPath: string | null = null;
       let processedSize = 0;
-      let activeMetadata: Record<string, unknown> = originalMetadata;
-      let originalPath = videoRecord.originalPath;
 
       if (transcodedStats.size > originalStats.size) {
         finalPath = path.join(vaultDir, `${videoId}${path.extname(filename)}`);
@@ -329,36 +320,19 @@ async function processVideo(job: QueueJob) {
         await unlink(outputPath).catch(() => {});
         await unlink(finalPath).catch(() => {});
         await rename(filePath, finalPath);
-        originalPath = toStoredPath(finalPath);
       } else {
         await unlink(finalWebmPath).catch(() => {});
         await rename(outputPath, finalWebmPath);
         finalPath = finalWebmPath;
-        processedPath = toStoredPath(finalPath);
         processedSize = transcodedStats.size;
-        try {
-          const outputMetadata = await extractMetadata(finalPath);
-          activeMetadata = outputMetadata.raw as Record<string, unknown>;
-        } catch {
-          activeMetadata = {
-            ...originalMetadata,
-            format: { format_name: "webm" },
-            streams: [{ codec_type: "video", codec_name: "vp9" }],
-          };
-        }
         finalSize = processedSize;
       }
 
       // 5. Final DB Updates
       updateVideo(videoId, {
         status: "COMPLETED",
-        originalPath,
-        processedPath,
-        processedSize,
-        activePath: toStoredPath(finalPath),
         activeSize: finalSize,
         originalMetadata,
-        activeMetadata,
       });
 
       createJobHistory({

@@ -12,7 +12,6 @@ type Video = {
   id: string;
   filename: string;
   title: string;
-  description: string;
   status: string;
   mediaType?: string;
   duration: number | null;
@@ -317,7 +316,6 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
   const normalizeTag = (input: string) => input.trim().toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').replace(/[^a-z0-9\s-_]/g, '');
 
   const [title, setTitle] = useState(video.title);
-  const [description, setDescription] = useState(video.description);
   const [selectedTags, setSelectedTags] = useState<string[]>(
     (video.tags || [])
       .map((t) => normalizeTag(t.name))
@@ -398,7 +396,6 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title,
-          description,
           tags: tagsArray,
           date: new Date(payloadDate).toISOString(),
         })
@@ -520,7 +517,7 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
                   <div style={{ width: '100%', background: '#000', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                     <img 
                       src={`/v/${video.id}`} 
-                      alt={video.originalMetadata?.originalFilename || video.title} 
+                      alt={video.originalMetadata?.filename || video.title}
                       style={{ width: '100%', maxHeight: '600px', objectFit: 'contain', display: 'block' }}
                     />
                   </div>
@@ -558,16 +555,6 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   style={{ width: '100%', padding: '0.75rem', background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--foreground)' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>Description</label>
-                <textarea 
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={3}
-                  style={{ width: '100%', padding: '0.75rem', background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--foreground)', resize: 'vertical' }}
                 />
               </div>
 
@@ -714,7 +701,7 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
           <div style={{ marginBottom: '2rem' }}>
             <div style={{ background: 'var(--secondary)', padding: '1.5rem', borderRadius: 'var(--radius)', overflowX: 'auto', maxHeight: '600px', fontSize: '0.875rem', lineHeight: '1.8', wordBreak: 'break-all' }}>
               <strong>ID:</strong> {video.id}<br/>
-              <strong>Original Filename:</strong> {video.originalMetadata?.originalFilename || video.filename}<br/>
+              <strong>Original Filename:</strong> {video.originalMetadata?.filename || video.filename}<br/>
               <strong>Filename:</strong> {video.filename}<br/>
               <strong>Title:</strong> {video.title}<br/>
               <strong>Status:</strong> {video.status}<br/>

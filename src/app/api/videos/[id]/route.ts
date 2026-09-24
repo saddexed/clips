@@ -21,7 +21,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, description, tags, isHidden, date } = body;
+    const { title, tags, isHidden, date } = body;
 
     const existingVideo = await repository.video.findUnique({
       where: { id },
@@ -35,9 +35,8 @@ export async function PATCH(
     // Build the update query dynamically
     const updateData: any = {};
     if (title !== undefined) updateData.title = title;
-    if (description !== undefined) updateData.description = description;
     if (isHidden !== undefined) updateData.isHidden = isHidden;
-    if (date !== undefined) updateData.date = new Date(date);
+    if (date !== undefined) updateData.createdAt = new Date(date);
 
     // Handle Tags (Many-to-Many relation)
     if (Array.isArray(tags)) {
@@ -119,16 +118,19 @@ export async function DELETE(
     const trashedDir = path.join(dataPath, ".trashed");
     await mkdir(trashedDir, { recursive: true });
 
-    // Move the processed webm to .trashed
+    // Move the active vault file to .trashed when it is separate from the upload.
     let trashedPath = null;
-    if (video.processedPath) {
+    const retainedPath =
+      video.processedPath ||
+      (video.activePath !== video.originalPath ? video.activePath : null);
+    if (retainedPath) {
       try {
-        const ext = path.extname(video.processedPath);
+        const ext = path.extname(retainedPath);
         const physicalName = `${id}${ext}`;
         const trashedAbsolutePath = path.join(trashedDir, physicalName);
         trashedPath = toStoredPath(trashedAbsolutePath);
-        const sourcePath = resolveStoredPath(video.processedPath);
-        if (!sourcePath) throw new Error("Processed media path is empty");
+        const sourcePath = resolveStoredPath(retainedPath);
+        if (!sourcePath) throw new Error("Active media path is empty");
 
         // Ensure source exists before attempting rename
         await stat(sourcePath);

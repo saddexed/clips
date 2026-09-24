@@ -64,7 +64,7 @@ export const repository = {
       const tags =
         data.tags?.connectOrCreate?.map((tag) => tag.create.name) ||
         (data.tags?.set ? [] : undefined);
-      return updateVideo(where.id, { ...data, tags });
+      return updateVideo(where.id, { ...data, tags } as Record<string, unknown> & { tags?: string[] });
     },
     delete: async ({ where }: { where: { id: string } }) => {
       const video = getVideo(where.id);

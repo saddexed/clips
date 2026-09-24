@@ -9,6 +9,7 @@ import {
 import { getUploadDefaults } from "@/lib/settings";
 import { enqueueVideoJob } from "@/lib/queue";
 import { extractMetadata } from "@/lib/ffmpeg";
+import { normalizeMediaMetadata } from "@/lib/media";
 import { getDataPath, toStoredPath } from "@/lib/paths";
 import { hashBytes } from "@/lib/hash";
 import { revalidatePath } from "next/cache";
@@ -82,42 +83,51 @@ export async function POST(request: NextRequest) {
       : undefined;
     const defaults = await getUploadDefaults();
 
-    let sourceMetadata: Record<string, unknown> = {
-      originalFilename: file.name,
-      contentType: file.type,
-    };
+    let probeMetadata: Awaited<ReturnType<typeof extractMetadata>> | null = null;
     if (isVideo) {
       try {
-        const metadata = await extractMetadata(filePath);
-        sourceMetadata = { ...sourceMetadata, ...metadata.raw };
+        probeMetadata = await extractMetadata(filePath);
       } catch (error) {
         console.warn("Unable to inspect uploaded media before queueing", error);
       }
     }
 
     const now = new Date();
+    const createdAt =
+      clientDate && !isNaN(clientDate.getTime()) ? clientDate : now;
+    const normalizedMetadata = normalizeMediaMetadata({
+      id: videoId,
+      filename: file.name,
+      hash: originalSha256,
+      contentType: file.type || (isImage ? "image/*" : "video/*"),
+      size: file.size,
+      createdAt,
+      uploadedAt: now,
+      raw: probeMetadata?.raw,
+      width: probeMetadata?.width,
+      height: probeMetadata?.height,
+      duration: probeMetadata?.duration,
+      videoCodec: probeMetadata?.videoCodec,
+      bitRate:
+        typeof probeMetadata?.raw?.format?.bit_rate === "string"
+          ? Number(probeMetadata.raw.format.bit_rate)
+          : undefined,
+    });
     let video: ReturnType<typeof createVideo>;
     try {
       video = createVideo({
         id: videoId,
         filename: physicalName,
-        originalPath: toStoredPath(filePath),
         originalSha256,
-        activePath: toStoredPath(filePath),
         activeSize: file.size,
-        activeMetadata: sourceMetadata,
+        metadata: normalizedMetadata,
         title:
           formData.get("title")?.toString() ||
           file.name.replace(/\.[^/.]+$/, ""),
-        description: formData.get("description")?.toString() || "",
         status: "QUEUED",
-        mediaType: isImage ? "IMAGE" : "VIDEO",
         isHidden: !defaults.visibilityEnabled,
-        originalSize: file.size,
-        originalMetadata: sourceMetadata,
-        createdAt: clientDate && !isNaN(clientDate.getTime()) ? clientDate : now,
+        createdAt,
         uploadedAt: now,
-        date: clientDate && !isNaN(clientDate.getTime()) ? clientDate : now,
         tags: defaults.tags,
       });
     } catch (error) {

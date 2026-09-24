@@ -1,0 +1,286 @@
+import { Database } from "bun:sqlite";
+import { existsSync, mkdirSync } from "node:fs";
+import path from "node:path";
+import { normalizeMediaMetadata } from "./media";
+import { resolveStoredPath, toStoredPath } from "./paths";
+
+export type MediaType = "VIDEO" | "IMAGE";
+export type VideoStatus = "UPLOADING" | "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
+export type JobType = "UPLOAD" | "TRANSCODE" | "METADATA_EXTRACT" | "EDIT" | "DELETE" | "HIDE" | "RESTORE" | "CANCELLED";
+export type JobStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
+export type Tag = { id: string; name: string };
+export type Video = {
+  id: string;
+  title: string;
+  status: VideoStatus;
+  size: number;
+  sha256Hash: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: Date;
+  uploadedAt: Date;
+  deletedAt: Date | null;
+  isHidden: boolean;
+  tags: Tag[];
+  filename: string;
+  description: string;
+  mediaType: MediaType;
+  originalPath: string;
+  processedPath: string | null;
+  activePath: string;
+  originalMetadata: Record<string, unknown> | null;
+  activeMetadata: Record<string, unknown> | null;
+  originalSize: number;
+  processedSize: number;
+  activeSize: number;
+  duration: number | null;
+  width: number | null;
+  height: number | null;
+  date: Date;
+  updatedAt: Date;
+};
+
+export type JobHistory = {
+  id: string;
+  videoId: string | null;
+  jobType: JobType;
+  status: JobStatus;
+  startedAt: Date;
+  completedAt: Date | null;
+  originalSize: number;
+  processedSize: number;
+  errorMessage: string | null;
+  metadata: Record<string, unknown> | null;
+  video: Pick<Video, "id" | "title" | "filename" | "originalMetadata"> | null;
+};
+
+type VideoRow = {
+  id: string;
+  title: string;
+  status: VideoStatus;
+  size: number;
+  sha256_hash: string | null;
+  metadata: string | null;
+  created_at: string;
+  uploaded_at: string;
+  deleted_at: string | null;
+  is_hidden: number;
+};
+
+type HistoryRow = {
+  id: string;
+  video_id: string | null;
+  job_type: JobType;
+  status: JobStatus;
+  started_at: string;
+  completed_at: string | null;
+  original_size: number;
+  processed_size: number;
+  error_message: string | null;
+  metadata: string | null;
+  video_title: string | null;
+  video_filename: string | null;
+  video_original_metadata: string | null;
+};
+
+function databasePath() {
+  const url = process.env.DATABASE_URL || "file:./data/clips.db";
+  if (!url.startsWith("file:")) throw new Error("DATABASE_URL must be a SQLite file URL");
+  return path.resolve(process.cwd(), url.slice(5));
+}
+
+function now() { return new Date().toISOString(); }
+function encodeJson(value: unknown) { return value == null ? null : JSON.stringify(value); }
+function decodeJson(value: string | null): any {
+  if (!value) return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown> : null;
+  } catch { return null; }
+}
+function dateValue(value: unknown, fallback = now()) {
+  const date = value instanceof Date ? value : new Date(String(value || fallback));
+  return Number.isNaN(date.getTime()) ? fallback : date.toISOString();
+}
+function extension(value: string | null | undefined) {
+  const match = value?.match(/\.([a-z0-9]+)$/i);
+  return match ? `.${match[1].toLowerCase()}` : "";
+}
+function storedPath(folder: string, id: string, ext: string) {
+  return toStoredPath(path.join(folder, `${id}${ext}`));
+}
+
+export const database = (() => {
+  const file = databasePath();
+  mkdirSync(path.dirname(file), { recursive: true });
+  return new Database(file, { create: true, strict: true });
+})();
+
+database.exec("PRAGMA foreign_keys = OFF; PRAGMA busy_timeout = 5000;");
+database.exec(`
+CREATE TABLE IF NOT EXISTS tags (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, deleted_at TEXT);
+CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS queue_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS job_history (
+  id TEXT PRIMARY KEY, video_id TEXT REFERENCES videos(id) ON DELETE SET NULL,
+  job_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'PENDING', started_at TEXT NOT NULL,
+  completed_at TEXT, original_size INTEGER NOT NULL DEFAULT 0, processed_size INTEGER NOT NULL DEFAULT 0,
+  error_message TEXT, metadata TEXT
+);
+CREATE TABLE IF NOT EXISTS queue_jobs (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'wait', progress INTEGER NOT NULL DEFAULT 0,
+  attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3, failed_reason TEXT,
+  created_at TEXT NOT NULL, started_at TEXT, completed_at TEXT, lease_expires_at TEXT
+);
+`);
+
+function columns(table: string) {
+  return new Set(database.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all().map((row) => row.name));
+}
+
+function createVideos() {
+  database.exec(`
+CREATE TABLE IF NOT EXISTS videos (
+  id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'UPLOADING',
+  size INTEGER NOT NULL DEFAULT 0, sha256_hash TEXT, metadata TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL, uploaded_at TEXT NOT NULL, deleted_at TEXT, is_hidden INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS videos_status_idx ON videos(status);
+CREATE INDEX IF NOT EXISTS videos_created_idx ON videos(created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS videos_sha256_hash_idx ON videos(sha256_hash) WHERE sha256_hash IS NOT NULL;
+`);
+}
+
+function migrateLegacy() {
+  const oldRows = database.query<Record<string, unknown>, []>("SELECT * FROM videos").all();
+  database.exec("DROP INDEX IF EXISTS videos_status_idx; DROP INDEX IF EXISTS videos_date_idx; DROP INDEX IF EXISTS videos_original_sha256_idx;");
+  database.exec(`
+CREATE TABLE videos_lean (
+  id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'UPLOADING',
+  size INTEGER NOT NULL DEFAULT 0, sha256_hash TEXT, metadata TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL, uploaded_at TEXT NOT NULL, deleted_at TEXT, is_hidden INTEGER NOT NULL DEFAULT 0
+);`);
+  const insertVideo = database.query("INSERT OR IGNORE INTO videos_lean (id,title,status,size,sha256_hash,metadata,created_at,uploaded_at,deleted_at,is_hidden) VALUES (?,?,?,?,?,?,?,?,?,?)");
+  for (const row of oldRows) {
+    const old = decodeJson(row.original_metadata as string | null) || {};
+    const id = String(row.id);
+    const filename = String(old.originalFilename || old.filename || row.filename || `${id}.webm`);
+    const createdAt = dateValue(row.created_at || row.date);
+    const uploadedAt = dateValue(row.uploaded_at, createdAt);
+    const originalSize = Number(row.original_size || old.size || 0);
+    const hash = String(row.original_sha256 || old.hash || "") || null;
+    const type = String(old.contentType || (row.media_type === "IMAGE" ? "image/*" : "video/*"));
+    const metadata = normalizeMediaMetadata({ id, filename, hash: hash || "", contentType: type, size: originalSize, createdAt, uploadedAt, raw: old, width: Number(row.width) || undefined, height: Number(row.height) || undefined, duration: Number(row.duration) || undefined });
+    insertVideo.run(id, String(row.title || filename), String(row.status || "UPLOADING"), Number(row.active_size || row.processed_size || originalSize), hash, JSON.stringify(metadata), createdAt, uploadedAt, row.deleted_at ? dateValue(row.deleted_at) : null, Number(row.is_hidden || 0));
+  }
+  database.exec("DROP TABLE videos; ALTER TABLE videos_lean RENAME TO videos;");
+}
+
+function removeLegacyArtifactsTable() {
+  if (!columns("artifacts").size) return;
+  try {
+    database.exec("DROP TABLE artifacts;");
+  } catch (error) {
+    console.warn("Unable to remove the legacy artifacts table during startup", error);
+  }
+}
+
+const videoColumns = columns("videos");
+if (videoColumns.has("original_path")) {
+  migrateLegacy();
+  createVideos();
+} else {
+  createVideos();
+}
+removeLegacyArtifactsTable();
+database.exec(`
+CREATE TABLE IF NOT EXISTS video_tags (video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE, tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE, PRIMARY KEY(video_id, tag_id));
+CREATE INDEX IF NOT EXISTS job_history_video_id_idx ON job_history(video_id);
+CREATE INDEX IF NOT EXISTS job_history_status_idx ON job_history(status);
+CREATE INDEX IF NOT EXISTS queue_jobs_status_created_idx ON queue_jobs(status, created_at);
+`);
+
+function tagsFor(videoId: string) {
+  return database.query<Tag, [string]>("SELECT t.id,t.name FROM tags t JOIN video_tags vt ON vt.tag_id=t.id WHERE vt.video_id=? AND t.deleted_at IS NULL ORDER BY t.name").all(videoId);
+}
+function replaceTags(videoId: string, names: string[]) {
+  database.query("DELETE FROM video_tags WHERE video_id=?").run(videoId);
+  for (const name of names) {
+    const tag = database.query<Tag, [string]>("SELECT id,name FROM tags WHERE name=? AND deleted_at IS NULL").get(name) || (() => { const value = { id: crypto.randomUUID(), name }; database.query("INSERT INTO tags (id,name) VALUES (?,?)").run(value.id, value.name); return value; })();
+    database.query("INSERT OR IGNORE INTO video_tags(video_id,tag_id) VALUES (?,?)").run(videoId, tag.id);
+  }
+}
+function filename(metadata: Record<string, unknown> | null, id: string) { return typeof metadata?.filename === "string" && metadata.filename ? metadata.filename : `${id}.webm`; }
+function dimensions(metadata: Record<string, unknown> | null): [number | null, number | null] { const value = metadata?.resolution; const match = typeof value === "string" ? value.match(/^(\d+)x(\d+)$/) : null; return match ? [Number(match[1]), Number(match[2])] : [null, null]; }
+function pathExists(value: string) {
+  const resolved = resolveStoredPath(value);
+  return resolved ? existsSync(resolved) : false;
+}
+function mediaPaths(id: string, name: string, mediaType: MediaType) {
+  const originalExtension = extension(name) || ".webm";
+  const uploadPath = storedPath(".uploads", id, originalExtension);
+  const vaultOriginalPath = storedPath("vault", id, originalExtension);
+  const processedPath = storedPath("vault", id, mediaType === "IMAGE" ? ".webp" : ".webm");
+  const originalPath = pathExists(uploadPath)
+    ? uploadPath
+    : pathExists(vaultOriginalPath)
+      ? vaultOriginalPath
+      : uploadPath;
+  const hasProcessed = pathExists(processedPath) && processedPath !== originalPath;
+  return {
+    originalPath,
+    processedPath: hasProcessed ? processedPath : null,
+    activePath: hasProcessed
+      ? processedPath
+      : pathExists(vaultOriginalPath)
+        ? vaultOriginalPath
+        : originalPath,
+  };
+}
+function mapVideo(row: VideoRow, tags: Tag[]): Video {
+  const metadata = decodeJson(row.metadata);
+  const name = filename(metadata, row.id);
+  const mediaType: MediaType = String(metadata?.contentType || "").startsWith("image/") ? "IMAGE" : "VIDEO";
+  const paths = mediaPaths(row.id, name, mediaType);
+  const activeMetadata = paths.processedPath
+    ? {
+        ...metadata,
+        contentType: mediaType === "IMAGE" ? "image/webp" : "video/webm",
+        ...(mediaType === "VIDEO" ? { video_codec: "vp9/webm", audio_codec: "opus/webm" } : {}),
+      }
+    : metadata;
+  const [width, height] = dimensions(metadata);
+  return { id: row.id, title: row.title, status: row.status, size: Number(row.size), sha256Hash: row.sha256_hash, metadata, createdAt: new Date(row.created_at), uploadedAt: new Date(row.uploaded_at), deletedAt: row.deleted_at ? new Date(row.deleted_at) : null, isHidden: Boolean(row.is_hidden), tags, filename: name, description: "", mediaType, originalPath: paths.originalPath, processedPath: paths.processedPath, activePath: paths.activePath, originalMetadata: metadata, activeMetadata, originalSize: Number(metadata?.size || 0), processedSize: paths.processedPath ? Number(row.size) : 0, activeSize: Number(row.size), duration: typeof metadata?.duration === "number" ? metadata.duration : null, width, height, date: new Date(row.created_at), updatedAt: new Date(row.created_at) };
+}
+export function getVideo(id: string, withTags = true) { const row = database.query<VideoRow, [string]>("SELECT * FROM videos WHERE id=?").get(id); return row ? mapVideo(row, withTags ? tagsFor(id) : []) : null; }
+export function findVideoIdByOriginalSha256(hash: string) { return database.query<{ id: string }, [string]>("SELECT id FROM videos WHERE sha256_hash=?").get(hash)?.id || null; }
+export function listVideos(options: { publicOnly?: boolean; limit?: number } = {}) { const filters = ["deleted_at IS NULL"]; if (options.publicOnly) filters.push("status='COMPLETED'", "is_hidden=0"); const limit = options.limit ? ` LIMIT ${Math.max(1, Math.floor(options.limit))}` : ""; return database.query<VideoRow, []>(`SELECT * FROM videos WHERE ${filters.join(" AND ")} ORDER BY ${options.publicOnly ? "created_at" : "uploaded_at"} DESC${limit}`).all().map((row) => mapVideo(row, tagsFor(row.id))); }
+
+type VideoInput = { id: string; title: string; status: VideoStatus; size?: number; sha256Hash?: string | null; originalSha256?: string | null; metadata?: Record<string, unknown> | null; originalMetadata?: Record<string, unknown> | null; activeSize?: number; filename?: string; originalSize?: number; createdAt: Date; uploadedAt: Date; deletedAt?: Date | null; isHidden: boolean; tags?: string[] };
+export function createVideo(input: VideoInput) {
+  const metadata = input.metadata || input.originalMetadata || { filename: input.filename || `${input.id}.webm`, id: input.id, hash: input.sha256Hash || input.originalSha256 || "", contentType: "video/*", size: input.originalSize || input.size || 0, created_at: input.createdAt.toISOString(), uploaded_at: input.uploadedAt.toISOString() };
+  const metadataHash = typeof metadata.hash === "string" ? metadata.hash : null;
+  const activeSize = input.activeSize ?? input.size ?? input.originalSize ?? Number(metadata.size || 0);
+  database.transaction(() => { database.query("INSERT INTO videos(id,title,status,size,sha256_hash,metadata,created_at,uploaded_at,deleted_at,is_hidden) VALUES(?,?,?,?,?,?,?,?,?,?)").run(input.id, input.title, input.status, activeSize, input.sha256Hash || input.originalSha256 || metadataHash, JSON.stringify(metadata), input.createdAt.toISOString(), input.uploadedAt.toISOString(), input.deletedAt?.toISOString() || null, Number(input.isHidden)); replaceTags(input.id, input.tags || []); })();
+  return getVideo(input.id)!;
+}
+export function updateVideo(id: string, updates: Omit<Partial<Video>, "tags"> & Record<string, unknown> & { tags?: string[] }) {
+  const metadata = (updates.metadata || updates.originalMetadata) as Record<string, unknown> | undefined;
+  const setters: string[] = []; const values: unknown[] = []; const add = (key: string, value: unknown) => { setters.push(`${key}=?`); values.push(value); };
+  if (Object.hasOwn(updates, "title")) add("title", updates.title); if (Object.hasOwn(updates, "status")) add("status", updates.status); if (Object.hasOwn(updates, "size")) add("size", updates.size); else if (Object.hasOwn(updates, "activeSize")) add("size", updates.activeSize); if (Object.hasOwn(updates, "sha256Hash")) add("sha256_hash", updates.sha256Hash); if (metadata) add("metadata", JSON.stringify(metadata)); if (Object.hasOwn(updates, "createdAt")) add("created_at", dateValue(updates.createdAt)); if (Object.hasOwn(updates, "uploadedAt")) add("uploaded_at", dateValue(updates.uploadedAt)); if (Object.hasOwn(updates, "deletedAt")) add("deleted_at", updates.deletedAt ? dateValue(updates.deletedAt) : null); if (Object.hasOwn(updates, "isHidden")) add("is_hidden", Number(updates.isHidden));
+  if (setters.length) { values.push(id); database.query(`UPDATE videos SET ${setters.join(",")} WHERE id=?`).run(...(values as any[])); }
+  if (updates.tags) replaceTags(id, updates.tags);
+  return getVideo(id);
+}
+export function deleteVideo(id: string) { database.query("DELETE FROM videos WHERE id=?").run(id); }
+
+function historyMap(row: HistoryRow): JobHistory { return { id: row.id, videoId: row.video_id, jobType: row.job_type, status: row.status, startedAt: new Date(row.started_at), completedAt: row.completed_at ? new Date(row.completed_at) : null, originalSize: Number(row.original_size), processedSize: Number(row.processed_size), errorMessage: row.error_message, metadata: decodeJson(row.metadata), video: row.video_id && row.video_title !== null ? { id: row.video_id, title: row.video_title, filename: row.video_filename || row.video_id, originalMetadata: decodeJson(row.video_original_metadata) } : null }; }
+export function createJobHistory(input: Omit<JobHistory, "id" | "startedAt" | "video"> & { id?: string; startedAt?: Date }) { const id = input.id || crypto.randomUUID(); database.query("INSERT INTO job_history(id,video_id,job_type,status,started_at,completed_at,original_size,processed_size,error_message,metadata) VALUES(?,?,?,?,?,?,?,?,?,?)").run(id, input.videoId, input.jobType, input.status, (input.startedAt || new Date()).toISOString(), input.completedAt?.toISOString() || null, input.originalSize, input.processedSize, input.errorMessage, encodeJson(input.metadata)); return id; }
+export function listJobHistory(limit = 100) { return database.query<HistoryRow, [number]>("SELECT j.*,v.title video_title,json_extract(v.metadata,'$.filename') video_filename,v.metadata video_original_metadata FROM job_history j LEFT JOIN videos v ON v.id=j.video_id ORDER BY j.started_at DESC LIMIT ?").all(limit).map(historyMap); }
+export function jobHistoryForVideo(videoId: string) { return database.query<HistoryRow, [string]>("SELECT j.*,v.title video_title,json_extract(v.metadata,'$.filename') video_filename,v.metadata video_original_metadata FROM job_history j LEFT JOIN videos v ON v.id=j.video_id WHERE j.video_id=? ORDER BY j.started_at").all(videoId).map(historyMap); }
+export function updateJobHistory(id: string, metadata: Record<string, unknown>) { database.query("UPDATE job_history SET metadata=? WHERE id=?").run(JSON.stringify(metadata), id); }
+export function search(q: string, isAdmin: boolean) { const like = `%${q}%`; const tags = database.query<Pick<Tag, "name">, [string]>("SELECT name FROM tags WHERE deleted_at IS NULL AND name LIKE ? COLLATE NOCASE ORDER BY name LIMIT 12").all(like); const visibility = isAdmin ? "" : " AND v.status='COMPLETED' AND v.is_hidden=0"; const rows = database.query<{ id: string; title: string; metadata: string }, [string, string, string]>(`SELECT DISTINCT v.id,v.title,v.metadata FROM videos v LEFT JOIN video_tags vt ON vt.video_id=v.id LEFT JOIN tags t ON t.id=vt.tag_id WHERE v.deleted_at IS NULL${visibility} AND (v.title LIKE ? COLLATE NOCASE OR json_extract(v.metadata,'$.filename') LIKE ? COLLATE NOCASE OR t.name LIKE ? COLLATE NOCASE) ORDER BY v.created_at DESC LIMIT 20`).all(like, like, like); return { tags, videos: rows.map((row) => ({ id: row.id, title: row.title, filename: filename(decodeJson(row.metadata), row.id) })) }; }
+export function getSetting(key: string) { const row = database.query<{ value: string }, [string]>("SELECT value FROM app_settings WHERE key=?").get(key); return row ? decodeJson(row.value) : undefined; }
+export function setSetting(key: string, value: unknown) { database.query("INSERT INTO app_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").run(key, JSON.stringify(value), now()); }
+database.exec("PRAGMA foreign_keys = ON;");

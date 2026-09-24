@@ -52,19 +52,27 @@ export async function DELETE(
 
                 // Move processed output to trashed if it somehow survived partial processing
                 let trashedPath = null;
-                if (video.processedPath) {
+                const retainedPath =
+                    video.processedPath ||
+                    (video.activePath !== video.originalPath ? video.activePath : null);
+                if (retainedPath) {
                     try {
-                        const ext = path.extname(video.processedPath);
+                        const ext = path.extname(retainedPath);
                         const physicalName = `${videoId}${ext}`;
                         const trashedAbsolutePath = path.join(trashedDir, physicalName);
                         trashedPath = toStoredPath(trashedAbsolutePath);
-                        const sourcePath = resolveStoredPath(video.processedPath);
-                        if (!sourcePath) throw new Error("Processed media path is empty");
+                        const sourcePath = resolveStoredPath(retainedPath);
+                        if (!sourcePath) throw new Error("Active media path is empty");
                         await stat(sourcePath);
                         await rename(sourcePath, trashedAbsolutePath);
                     } catch {
                         /* suppress */
                     }
+                }
+
+                // Temporary transcodes use deterministic names and do not need database records.
+                for (const extension of [".webm", ".webp"]) {
+                    await unlink(path.join(dataPath, "processed", `${videoId}${extension}`)).catch(() => {});
                 }
 
                 // Inform user in History tab
