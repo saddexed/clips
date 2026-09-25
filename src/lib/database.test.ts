@@ -1,11 +1,36 @@
 import { expect, test } from "bun:test";
 import {
   createVideo,
+  database,
   deleteVideo,
   findVideoIdByOriginalSha256,
+  getSetting,
   listVideosPage,
+  setSetting,
 } from "./database";
 import { hashBytes } from "./hash";
+
+test("settings round-trip arrays, booleans, strings, and objects", () => {
+  const key = `setting-${crypto.randomUUID()}`;
+  const cases: unknown[] = [
+    ["alpha", "beta"],
+    true,
+    false,
+    "-crf 18",
+    42,
+    { nested: { value: 1 } },
+  ];
+
+  try {
+    for (const value of cases) {
+      setSetting(key, value);
+      expect(getSetting(key)).toEqual(value);
+    }
+    expect(getSetting(`missing-${crypto.randomUUID()}`)).toBeUndefined();
+  } finally {
+    database.query("DELETE FROM app_settings WHERE key=?").run(key);
+  }
+});
 
 test("original upload hashes are unique in SQLite", () => {
   const originalSha256 = hashBytes(

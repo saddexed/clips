@@ -10,6 +10,7 @@
     "lint": "next lint",
     "test": "bun test",
     "worker:start": "bun src/worker/index.ts",
+    "import:postgresql": "bun scripts/import-postgres.ts",
     "migrate:sqlite3": "bun scripts/migrate-sqlite3.ts",
     "delete:postgresql": "bun scripts/delete-postgresql.ts"
   },

@@ -103,6 +103,12 @@ function decodeJson(value: string | null): any {
       ? parsed as Record<string, unknown> : null;
   } catch { return null; }
 }
+// Settings hold arrays, booleans, and strings as well as objects, so they need
+// the parsed value verbatim rather than decodeJson's object-only contract.
+function decodeSettingValue(value: string | null): unknown {
+  if (!value) return undefined;
+  try { return JSON.parse(value); } catch { return undefined; }
+}
 function dateValue(value: unknown, fallback = now()) {
   const date = value instanceof Date ? value : new Date(String(value || fallback));
   return Number.isNaN(date.getTime()) ? fallback : date.toISOString();
@@ -411,6 +417,6 @@ export function listJobHistoryPage(page = 1, limit = 50) {
 export function jobHistoryForVideo(videoId: string) { return database.query<HistoryRow, [string]>("SELECT j.*,v.title video_title,json_extract(v.metadata,'$.filename') video_filename,v.metadata video_original_metadata FROM job_history j LEFT JOIN videos v ON v.id=j.video_id WHERE j.video_id=? ORDER BY j.started_at").all(videoId).map(historyMap); }
 export function updateJobHistory(id: string, metadata: Record<string, unknown>) { database.query("UPDATE job_history SET metadata=? WHERE id=?").run(JSON.stringify(metadata), id); }
 export function search(q: string, isAdmin: boolean) { const like = `%${q}%`; const tags = database.query<Pick<Tag, "name">, [string]>("SELECT name FROM tags WHERE deleted_at IS NULL AND name LIKE ? COLLATE NOCASE ORDER BY name LIMIT 12").all(like); const visibility = isAdmin ? "" : " AND v.is_hidden=0"; const rows = database.query<{ id: string; title: string; metadata: string }, [string, string, string]>(`SELECT DISTINCT v.id,v.title,v.metadata FROM videos v LEFT JOIN video_tags vt ON vt.video_id=v.id LEFT JOIN tags t ON t.id=vt.tag_id WHERE v.deleted_at IS NULL${visibility} AND (v.title LIKE ? COLLATE NOCASE OR json_extract(v.metadata,'$.filename') LIKE ? COLLATE NOCASE OR t.name LIKE ? COLLATE NOCASE) ORDER BY v.created_at DESC LIMIT 20`).all(like, like, like); return { tags, videos: rows.map((row) => ({ id: row.id, title: row.title, filename: filename(decodeJson(row.metadata), row.id) })) }; }
-export function getSetting(key: string) { const row = database.query<{ value: string }, [string]>("SELECT value FROM app_settings WHERE key=?").get(key); return row ? decodeJson(row.value) : undefined; }
+export function getSetting(key: string) { const row = database.query<{ value: string }, [string]>("SELECT value FROM app_settings WHERE key=?").get(key); return row ? decodeSettingValue(row.value) : undefined; }
 export function setSetting(key: string, value: unknown) { database.query("INSERT INTO app_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").run(key, JSON.stringify(value), now()); }
 database.exec("PRAGMA foreign_keys = ON;");
