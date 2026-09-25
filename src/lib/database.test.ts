@@ -32,6 +32,36 @@ test("settings round-trip arrays, booleans, strings, and objects", () => {
   }
 });
 
+test("videos without a hash coexist, because the unique index is partial", () => {
+  const ids = [crypto.randomUUID(), crypto.randomUUID()];
+  const now = new Date();
+
+  try {
+    for (const id of ids) {
+      createVideo({
+        id,
+        title: `unhashed-${id}`,
+        status: "COMPLETED",
+        sha256Hash: null,
+        metadata: { filename: `${id}.mp4`, id, contentType: "video/mp4", size: 1 },
+        size: 1,
+        createdAt: now,
+        uploadedAt: now,
+        isHidden: false,
+      });
+    }
+    expect(
+      database
+        .query<{ count: number }, [string]>(
+          "SELECT COUNT(*) count FROM videos WHERE sha256_hash IS NULL AND title LIKE ?",
+        )
+        .get("unhashed-%")?.count,
+    ).toBeGreaterThanOrEqual(2);
+  } finally {
+    ids.forEach(deleteVideo);
+  }
+});
+
 test("original upload hashes are unique in SQLite", () => {
   const originalSha256 = hashBytes(
     new TextEncoder().encode(crypto.randomUUID()),

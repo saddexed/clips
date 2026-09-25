@@ -21,7 +21,6 @@ const removedVideoColumns = [
   "filename",
   "original_path",
   "processed_path",
-  "description",
   "media_type",
   "original_size",
   "processed_size",
@@ -96,6 +95,7 @@ for (const video of unhashed) {
   }
   const extension = path.extname(filename).toLowerCase() || ".webm";
   const candidates = [
+    resolveStoredPath(`vault/original/${video.id}${extension}`),
     resolveStoredPath(`.uploads/${video.id}${extension}`),
     resolveStoredPath(`vault/${video.id}${extension}`),
   ];

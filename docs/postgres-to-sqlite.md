@@ -29,6 +29,29 @@ goes.
 SHA-256 hashes never existed in PostgreSQL, so the importer computes one per
 original while copying. That is what makes upload dedupe work afterwards.
 
+A hash is not a precondition for importing, though. A video whose original can't
+be found still gets its row, tags, and history — `sha256_hash` is simply left
+`NULL`, which the partial unique index allows. Upload dedupe won't recognize
+those videos until the bytes turn up and `bun run migrate:sqlite3` fills the
+column in. Pass `--skip-hashes` to defer hashing for every video and keep the
+import from reading the whole library off disk.
+
+## Stale recorded paths
+
+`originalPath` and `processedPath` reflect wherever storage lived when the row
+was written. If a later build reorganized the volume, those paths point at
+nothing. The importer treats them as a hint rather than the truth: when the
+recorded path misses, it looks the artifact up by id across every layout this
+project has used — `.uploads/`, `processed/`, the split `vault/original/` and
+`vault/converted/`, and the flat `vault/` of the intermediate builds.
+
+Flat `vault/` is searched last, and an entry there is only ever claimed once. A
+lone `vault/<id>.webm` is taken as the original, because an original and its
+transcode could collide at that path when both were WebM — so that video imports
+with no converted artifact rather than with the wrong file twice.
+
+The `originals` line in the report breaks down where each one was found.
+
 ## 1. Back up
 
 ```bash
@@ -112,8 +135,9 @@ of the repository can't strand it.
 bun run import:postgresql ~/clips/pg-export.json
 ```
 
-The importer aborts before writing anything if no original resolves, and prints
-the resolved data root above the counts. Check that line matches the mount.
+The importer prints the resolved data root above the counts. Check that line
+matches the mount — if every original looks missing, that is the first thing to
+suspect.
 
 The storage directory is owned by `root` because the old stack wrote to it from
 inside a container. The new deployment runs as your own user and needs to write
@@ -127,20 +151,24 @@ Nothing is written. The report is also your file inventory — read it before go
 further:
 
 ```
+  data root   /mnt/video_storage
   videos      136 of 136
   tags        17 distinct, 194 links
   history     391 rows (0 orphaned to null)
   settings    2 kept
-  media       originals 0 copied, converted 0 copied, thumbnails 136 present
-  gaps        0 missing originals, 0 duplicate hashes, 0 missing converted, 0 missing thumbnails
+  media       originals 136 copied, converted 0 copied, thumbnails 136 present
+  originals   vault/original 135, vault 1
+  gaps        0 missing originals, 0 unhashed, 0 duplicate hashes, 0 missing converted, 0 missing thumbnails
 ```
 
 Investigate before committing to a write if you see:
 
-- **Missing originals** — `originalPath` rows pointing at files that aren't there.
-  Those videos are skipped entirely.
-- **Missing converted** — a `processedPath` that no longer resolves. The video
-  imports, but only the original is available until it's re-transcoded.
+- **Missing originals** — no file with that id anywhere under the data root. The
+  video still imports, unhashed, with only its thumbnail to show.
+- **Unhashed** — a row that will land with `sha256_hash NULL`, either because its
+  original is missing or because you passed `--skip-hashes`.
+- **Missing converted** — no transcode found. The video imports, but only the
+  original is available until it's re-transcoded.
 - **Duplicate hashes** — two rows whose originals are byte-identical. Only the
   first survives, because `videos_sha256_hash_idx` is unique.
 
@@ -164,6 +192,14 @@ run can't double up — but a run that imported zero videos still wrote history 
 settings rows, and that database has to go before retrying.
 
 ## 5. Verify, then start
+
+If the report listed unhashed videos, backfill what it can now that everything is
+in the vault layout. It is safe to re-run at any time; rows whose originals are
+genuinely gone stay `NULL`.
+
+```bash
+bun run migrate:sqlite3
+```
 
 Confirm the row count, then bring up the app and worker and click through the
 gallery, a viewer page, and the admin history:

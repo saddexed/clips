@@ -4,11 +4,15 @@
  *   bun scripts/import-postgres.ts pg-export.json            # dry run, reports only
  *   bun scripts/import-postgres.ts pg-export.json --confirm  # writes rows, copies media
  *
+ * Add --skip-hashes to import without reading every original back off disk. The
+ * hash column stays NULL, which the partial unique index allows; upload dedupe
+ * simply won't recognize those videos until `bun run migrate:sqlite3` fills it in.
+ *
  * Media is copied, never moved, so the PostgreSQL-era layout stays intact for a
  * manual cleanup pass. Expect peak disk usage to roughly double until then.
  */
 import { createHash } from "node:crypto";
-import { createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { copyFile } from "node:fs/promises";
 import path from "node:path";
 import { createJobHistory, createVideo, database, setSetting } from "../src/lib/database";
@@ -68,8 +72,11 @@ const OBSOLETE_SETTINGS = new Set(["default_comments_enabled", "global_comments_
 
 const [exportPath] = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
 const confirm = process.argv.includes("--confirm");
+const skipHashes = process.argv.includes("--skip-hashes");
 if (!exportPath) {
-  console.error("Usage: bun scripts/import-postgres.ts <export.json> [--confirm]");
+  console.error(
+    "Usage: bun scripts/import-postgres.ts <export.json> [--confirm] [--skip-hashes]",
+  );
   process.exit(1);
 }
 
@@ -118,39 +125,63 @@ async function copyInto(source: string, target: string) {
 
 const dataPath = getDataPath();
 
-// Every original being absent means the data root is wrong far more often than it
-// means the media is gone, so refuse before writing history and settings rows.
-if (payload.videos.length && !payload.videos.some((video) => {
-  const resolved = resolveStoredPath(video.originalPath);
-  return Boolean(resolved && existsSync(resolved));
-})) {
-  throw new Error(
-    `No original media resolved under ${dataPath}. Set DATA_PATH to the directory the old deployment mounted at /app/data, for example DATA_PATH=/mnt/video_storage.`,
-  );
+/**
+ * Recorded paths go stale when a later build reorganizes storage, so index every
+ * layout this project has used and look artifacts up by id instead. Ordered by
+ * preference: the flat `vault/` of the intermediate builds comes last because an
+ * original and its transcode could collide there when both were WebM.
+ */
+const ORIGINAL_DIRS = [".uploads", "vault/original", "vault"];
+const CONVERTED_DIRS = ["processed", "vault/converted", "vault"];
+
+function indexDirectory(relative: string) {
+  const absolute = path.join(dataPath, relative);
+  const index = new Map<string, string[]>();
+  if (!existsSync(absolute)) return index;
+  for (const entry of readdirSync(absolute, { withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    const id = path.basename(entry.name, path.extname(entry.name));
+    const found = index.get(id) || [];
+    found.push(path.join(absolute, entry.name));
+    index.set(id, found);
+  }
+  return index;
+}
+
+const directoryIndex = new Map(
+  [...new Set([...ORIGINAL_DIRS, ...CONVERTED_DIRS])].map((dir) => [dir, indexDirectory(dir)]),
+);
+
+/** Resolves an artifact by id, preferring `preferredExt` when several exist. */
+function locate(dirs: string[], id: string, preferredExt: string | null, exclude?: string | null) {
+  for (const dir of dirs) {
+    const matches = (directoryIndex.get(dir)?.get(id) || []).filter((file) => file !== exclude);
+    if (!matches.length) continue;
+    const preferred = preferredExt
+      ? matches.find((file) => path.extname(file).toLowerCase() === preferredExt)
+      : null;
+    return { file: preferred || matches[0], dir };
+  }
+  return null;
 }
 
 const counts = {
   imported: 0,
-  skippedMissingOriginal: 0,
+  missingOriginal: 0,
   skippedDuplicateHash: 0,
   copiedOriginals: 0,
   copiedConverted: 0,
   copiedThumbnails: 0,
   missingConverted: 0,
   missingThumbnails: 0,
+  unhashed: 0,
 };
+const foundIn = new Map<string, number>();
 const seenHashes = new Map<string, string>();
 const importedIds = new Set<string>();
 const problems: string[] = [];
 
 for (const video of payload.videos) {
-  const originalSource = resolveStoredPath(video.originalPath);
-  if (!originalSource || !existsSync(originalSource)) {
-    counts.skippedMissingOriginal++;
-    problems.push(`${video.id}: original missing at ${video.originalPath}`);
-    continue;
-  }
-
   const metadataRecord = video.originalMetadata || {};
   const sourceName = String(
     metadataRecord.originalFilename || metadataRecord.filename || video.filename || `${video.id}`,
@@ -158,21 +189,42 @@ for (const video of payload.videos) {
   const contentType = String(
     metadataRecord.contentType || (video.mediaType === "IMAGE" ? "image/*" : "video/*"),
   );
+  const preferredExt = path.extname(sourceName).toLowerCase() || null;
 
-  const hash = await hashFile(originalSource);
-  const clash = seenHashes.get(hash);
-  if (clash) {
-    counts.skippedDuplicateHash++;
-    problems.push(`${video.id}: duplicate sha256 of ${clash}, skipped (unique index)`);
-    continue;
+  const recorded = resolveStoredPath(video.originalPath);
+  const located = recorded && existsSync(recorded)
+    ? { file: recorded, dir: "recorded" }
+    : locate(ORIGINAL_DIRS, video.id, preferredExt);
+  const originalSource = located?.file || null;
+  if (located) foundIn.set(located.dir, (foundIn.get(located.dir) || 0) + 1);
+  else {
+    counts.missingOriginal++;
+    problems.push(`${video.id}: no original found for ${sourceName}`);
   }
-  seenHashes.set(hash, video.id);
 
-  const originalSize = Number(video.originalSize) || statSync(originalSource).size;
+  // The hash is best effort: PostgreSQL never stored one, so it can only come from
+  // the bytes. A row without it imports fine - the unique index is partial - but
+  // upload dedupe cannot recognize that video until it is rehashed.
+  let hash: string | null = null;
+  if (originalSource && !skipHashes) {
+    hash = await hashFile(originalSource);
+    const clash = seenHashes.get(hash);
+    if (clash) {
+      counts.skippedDuplicateHash++;
+      problems.push(`${video.id}: duplicate sha256 of ${clash}, skipped (unique index)`);
+      continue;
+    }
+    seenHashes.set(hash, video.id);
+  } else {
+    counts.unhashed++;
+  }
+
+  const originalSize =
+    Number(video.originalSize) || (originalSource ? statSync(originalSource).size : 0);
   const metadata = normalizeMediaMetadata({
     id: video.id,
     filename: sourceName,
-    hash,
+    hash: hash || "",
     contentType,
     size: originalSize,
     createdAt: video.createdAt,
@@ -182,19 +234,29 @@ for (const video of payload.videos) {
     height: video.height ?? undefined,
     duration: video.duration ?? undefined,
   });
+  // createVideo falls back to metadata.hash for the column, and an empty string is
+  // NOT NULL - the partial unique index would reject the second unhashed video.
+  // Dropping the key keeps sha256_hash genuinely NULL.
+  if (!hash) delete (metadata as Partial<typeof metadata>).hash;
 
-  const originalTarget = vaultArtifactPath(video.id, sourceName, "original", video.mediaType);
-  if ((await copyInto(originalSource, originalTarget)) === "copied") counts.copiedOriginals++;
+  if (originalSource) {
+    const originalTarget = vaultArtifactPath(video.id, sourceName, "original", video.mediaType);
+    if ((await copyInto(originalSource, originalTarget)) === "copied") counts.copiedOriginals++;
+  }
 
-  const convertedSource = video.processedPath ? resolveStoredPath(video.processedPath) : null;
+  const recordedConverted = video.processedPath ? resolveStoredPath(video.processedPath) : null;
+  // Exclude the original so a flat vault/<id>.webm is never claimed as both.
+  const converted = recordedConverted && existsSync(recordedConverted)
+    ? { file: recordedConverted, dir: "recorded" }
+    : locate(CONVERTED_DIRS, video.id, ".webm", originalSource);
   let convertedSize = 0;
-  if (convertedSource && existsSync(convertedSource)) {
+  if (converted) {
     const convertedTarget = vaultArtifactPath(video.id, sourceName, "converted", video.mediaType);
-    if ((await copyInto(convertedSource, convertedTarget)) === "copied") counts.copiedConverted++;
-    convertedSize = Number(video.processedSize) || statSync(convertedSource).size;
+    if ((await copyInto(converted.file, convertedTarget)) === "copied") counts.copiedConverted++;
+    convertedSize = Number(video.processedSize) || statSync(converted.file).size;
   } else if (video.processedPath) {
     counts.missingConverted++;
-    problems.push(`${video.id}: converted artifact missing at ${video.processedPath}`);
+    problems.push(`${video.id}: no converted artifact found (recorded ${video.processedPath})`);
   }
 
   // Thumbnails still live at .thumbnails/<id>.webp at HEAD, so they need no move -
@@ -266,7 +328,10 @@ console.log(
   `  media       originals ${counts.copiedOriginals} copied, converted ${counts.copiedConverted} copied, thumbnails ${counts.copiedThumbnails} present`,
 );
 console.log(
-  `  gaps        ${counts.skippedMissingOriginal} missing originals, ${counts.skippedDuplicateHash} duplicate hashes, ${counts.missingConverted} missing converted, ${counts.missingThumbnails} missing thumbnails`,
+  `  originals   ${[...foundIn].map(([dir, n]) => `${dir} ${n}`).join(", ") || "none resolved"}`,
+);
+console.log(
+  `  gaps        ${counts.missingOriginal} missing originals, ${counts.unhashed} unhashed, ${counts.skippedDuplicateHash} duplicate hashes, ${counts.missingConverted} missing converted, ${counts.missingThumbnails} missing thumbnails`,
 );
 if (problems.length) {
   console.log("\nDetails:");
