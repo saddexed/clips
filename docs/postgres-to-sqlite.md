@@ -80,14 +80,31 @@ it with raw SQL — so don't be surprised when Prisma tooling doesn't know about
 ## 3. Dry run
 
 Check out this commit or later, `bun install`, and make sure `data/clips.db` does
-**not** exist yet. Point `DATA_PATH` at whatever the old `clips-app` container
-mounted to `/app/data`:
+**not** exist yet.
+
+`DATA_PATH` must point at whatever the old `clips-app` container mounted to
+`/app/data`. Without it the importer resolves media against `./data` and every
+original looks missing. Export both variables once so no later command can lose
+them:
 
 ```bash
 sudo docker inspect clips-app --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}'
 
-DATA_PATH=/mnt/video_storage DB=./data/clips.db \
-  bun run import:postgresql ~/clips/pg-export.json
+export DATA_PATH=/mnt/video_storage
+export DB=./data/clips.db
+
+bun run import:postgresql ~/clips/pg-export.json
+```
+
+The importer aborts before writing anything if no original resolves, and prints
+the resolved data root above the counts. Check that line matches the mount.
+
+The storage directory is owned by `root` because the old stack wrote to it from
+inside a container. The new deployment runs as your own user and needs to write
+there — for the vault, uploads, thumbnails, and trash — so hand it over first:
+
+```bash
+sudo chown -R "$USER:$USER" /mnt/video_storage
 ```
 
 Nothing is written. The report is also your file inventory — read it before going
@@ -114,14 +131,21 @@ Investigate before committing to a write if you see:
 ## 4. Import
 
 ```bash
-DATA_PATH=/mnt/video_storage DB=./data/clips.db \
-  bun run import:postgresql ~/clips/pg-export.json --confirm
+bun run import:postgresql ~/clips/pg-export.json --confirm
 ```
 
 Media lands as `vault/original/<id><ext>` and `vault/converted/<id>.webm`. Copies
-are skipped when the target already exists, so the copy phase is re-runnable. The
-importer refuses to run against a non-empty `videos` table — to start over, delete
-`data/clips.db` (and its `-shm`/`-wal` siblings) and run it again.
+are skipped when the target already exists, so the copy phase is re-runnable.
+
+To start over, delete the database and run again:
+
+```bash
+rm -f data/clips.db data/clips.db-shm data/clips.db-wal
+```
+
+The importer refuses `--confirm` against a non-empty `videos` table, so a partial
+run can't double up — but a run that imported zero videos still wrote history and
+settings rows, and that database has to go before retrying.
 
 ## 5. Verify, then start
 
