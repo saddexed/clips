@@ -346,9 +346,25 @@ export function listDeletedVideos() {
   return database.query<VideoRow, []>("SELECT * FROM videos WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC").all().map((row) => mapVideo(row, tagsFor(row.id)));
 }
 export function findVideoIdByOriginalSha256(hash: string) { return database.query<{ id: string }, [string]>("SELECT id FROM videos WHERE sha256_hash=?").get(hash)?.id || null; }
-export function listVideos(options: { publicOnly?: boolean; limit?: number } = {}) { const filters = ["deleted_at IS NULL"]; if (options.publicOnly) filters.push("is_hidden=0"); const limit = options.limit ? ` LIMIT ${Math.max(1, Math.floor(options.limit))}` : ""; return database.query<VideoRow, []>(`SELECT * FROM videos WHERE ${filters.join(" AND ")} ORDER BY created_at DESC, id DESC${limit}`).all().map((row) => mapVideo(row, tagsFor(row.id))); }
 export type VideoSortField = "title" | "duration" | "originalSize" | "date" | "uploadedAt";
 export type VideoSortOrder = "asc" | "desc";
+// Every video list orders through this one mapping so a requested sort is what the
+// SQL uses, and the same field means the same thing in each list.
+function videoSortColumns(prefix: string): Record<VideoSortField, string> {
+  return {
+    title: `LOWER(COALESCE(NULLIF(${prefix}title, ''), json_extract(${prefix}metadata, '$.filename')))`,
+    duration: `CAST(json_extract(${prefix}metadata, '$.duration') AS REAL)`,
+    originalSize: `${prefix}size`,
+    date: `${prefix}created_at`,
+    uploadedAt: `${prefix}uploaded_at`,
+  };
+}
+function videoOrderBy(sortField?: VideoSortField, sortOrder?: VideoSortOrder, prefix = "") {
+  const columns = videoSortColumns(prefix);
+  const field = sortField && Object.hasOwn(columns, sortField) ? sortField : "date";
+  return `${columns[field]} ${sortOrder === "asc" ? "ASC" : "DESC"}, ${prefix}id DESC`;
+}
+export function listVideos(options: { publicOnly?: boolean; limit?: number; sortField?: VideoSortField; sortOrder?: VideoSortOrder } = {}) { const filters = ["deleted_at IS NULL"]; if (options.publicOnly) filters.push("is_hidden=0"); const limit = options.limit ? ` LIMIT ${Math.max(1, Math.floor(options.limit))}` : ""; return database.query<VideoRow, []>(`SELECT * FROM videos WHERE ${filters.join(" AND ")} ORDER BY ${videoOrderBy(options.sortField, options.sortOrder)}${limit}`).all().map((row) => mapVideo(row, tagsFor(row.id))); }
 export function listVideosPage(options: { page?: number; limit?: number; query?: string; tags?: string[]; sortField?: VideoSortField; sortOrder?: VideoSortOrder } = {}) {
   const limit = Math.min(50, Math.max(1, Math.floor(options.limit || 50)));
   const requestedPage = options.page ?? 1;
@@ -364,16 +380,7 @@ export function listVideosPage(options: { page?: number; limit?: number; query?:
   const total = Number(database.query<{ count: number }, any[]>(`SELECT COUNT(DISTINCT v.id) count FROM videos v LEFT JOIN video_tags vt ON vt.video_id=v.id LEFT JOIN tags t ON t.id=vt.tag_id WHERE ${where}`).get(...params)?.count || 0);
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const currentPage = Math.min(page, totalPages);
-  const sortColumns: Record<VideoSortField, string> = {
-    title: "LOWER(COALESCE(NULLIF(v.title, ''), json_extract(v.metadata, '$.filename')))",
-    duration: "CAST(json_extract(v.metadata, '$.duration') AS REAL)",
-    originalSize: "v.size",
-    date: "v.created_at",
-    uploadedAt: "v.uploaded_at",
-  };
-  const sortField = options.sortField && Object.hasOwn(sortColumns, options.sortField) ? options.sortField : "date";
-  const sortOrder = options.sortOrder === "asc" ? "ASC" : "DESC";
-  const rows = database.query<VideoRow, (string | number)[]>(`SELECT DISTINCT v.* FROM videos v LEFT JOIN video_tags vt ON vt.video_id=v.id LEFT JOIN tags t ON t.id=vt.tag_id WHERE ${where} ORDER BY ${sortColumns[sortField]} ${sortOrder}, v.id DESC LIMIT ? OFFSET ?`).all(...params, limit, (currentPage - 1) * limit);
+  const rows = database.query<VideoRow, (string | number)[]>(`SELECT DISTINCT v.* FROM videos v LEFT JOIN video_tags vt ON vt.video_id=v.id LEFT JOIN tags t ON t.id=vt.tag_id WHERE ${where} ORDER BY ${videoOrderBy(options.sortField, options.sortOrder, "v.")} LIMIT ? OFFSET ?`).all(...params, limit, (currentPage - 1) * limit);
   return { items: rows.map((row) => mapVideo(row, tagsFor(row.id))), page: currentPage, limit, total, totalPages };
 }
 
@@ -423,7 +430,7 @@ export function listJobHistoryPage(page = 1, limit = 50) {
 }
 export function jobHistoryForVideo(videoId: string) { return database.query<HistoryRow, [string]>("SELECT j.*,v.title video_title,json_extract(v.metadata,'$.filename') video_filename,v.metadata video_original_metadata FROM job_history j LEFT JOIN videos v ON v.id=j.video_id WHERE j.video_id=? ORDER BY j.started_at").all(videoId).map(historyMap); }
 export function updateJobHistory(id: string, metadata: Record<string, unknown>) { database.query("UPDATE job_history SET metadata=? WHERE id=?").run(JSON.stringify(metadata), id); }
-export function search(q: string, isAdmin: boolean) { const like = `%${q}%`; const tags = database.query<Pick<Tag, "name">, [string]>("SELECT name FROM tags WHERE deleted_at IS NULL AND name LIKE ? COLLATE NOCASE ORDER BY name LIMIT 12").all(like); const visibility = isAdmin ? "" : " AND v.is_hidden=0"; const rows = database.query<{ id: string; title: string; metadata: string }, [string, string, string]>(`SELECT DISTINCT v.id,v.title,v.metadata FROM videos v LEFT JOIN video_tags vt ON vt.video_id=v.id LEFT JOIN tags t ON t.id=vt.tag_id WHERE v.deleted_at IS NULL${visibility} AND (v.title LIKE ? COLLATE NOCASE OR json_extract(v.metadata,'$.filename') LIKE ? COLLATE NOCASE OR t.name LIKE ? COLLATE NOCASE) ORDER BY v.created_at DESC LIMIT 20`).all(like, like, like); return { tags, videos: rows.map((row) => ({ id: row.id, title: row.title, filename: filename(decodeJson(row.metadata), row.id) })) }; }
+export function search(q: string, isAdmin: boolean, sortField?: VideoSortField, sortOrder?: VideoSortOrder) { const like = `%${q}%`; const tags = database.query<Pick<Tag, "name">, [string]>("SELECT name FROM tags WHERE deleted_at IS NULL AND name LIKE ? COLLATE NOCASE ORDER BY name LIMIT 12").all(like); const visibility = isAdmin ? "" : " AND v.is_hidden=0"; const rows = database.query<{ id: string; title: string; metadata: string }, [string, string, string]>(`SELECT DISTINCT v.id,v.title,v.metadata FROM videos v LEFT JOIN video_tags vt ON vt.video_id=v.id LEFT JOIN tags t ON t.id=vt.tag_id WHERE v.deleted_at IS NULL${visibility} AND (v.title LIKE ? COLLATE NOCASE OR json_extract(v.metadata,'$.filename') LIKE ? COLLATE NOCASE OR t.name LIKE ? COLLATE NOCASE) ORDER BY ${videoOrderBy(sortField, sortOrder, "v.")} LIMIT 20`).all(like, like, like); return { tags, videos: rows.map((row) => ({ id: row.id, title: row.title, filename: filename(decodeJson(row.metadata), row.id) })) }; }
 export function getSetting(key: string) { const row = database.query<{ value: string }, [string]>("SELECT value FROM app_settings WHERE key=?").get(key); return row ? decodeJson(row.value) : undefined; }
 export function setSetting(key: string, value: unknown) { database.query("INSERT INTO app_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").run(key, JSON.stringify(value), now()); }
 database.exec("PRAGMA foreign_keys = ON;");
