@@ -50,4 +50,4 @@ The worker claims one durable SQLite job at a time. Jobs interrupted by a proces
 
 PostgreSQL data cannot be read directly from `clips.db`. To bring an older
 PostgreSQL deployment across, export its records and replay them with
-`bun run import:postgresql` — see [`misc/postgres-to-sqlite.md`](misc/postgres-to-sqlite.md).
+`bun run import:postgresql` — see [`docs/postgres-to-sqlite.md`](docs/postgres-to-sqlite.md).
