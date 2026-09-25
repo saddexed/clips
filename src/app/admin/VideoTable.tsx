@@ -8,6 +8,7 @@ import SearchBar, { type SearchItem } from '@/components/SearchBar';
 import { mediaTypeLabel } from '@/lib/media';
 import { HistorySizeDetail, getActionDetails } from '@/lib/history-actions';
 import { cn } from '@/lib/utils';
+import type { VideoSortField, VideoSortOrder } from '@/lib/database';
 import { Modal, Pager, Segmented, StatusPill, btn, inputClass, labelClass, panelClass, tableClass, type Tone } from '@/components/ui';
 
 type Video = {
@@ -40,11 +41,8 @@ const formatDateTime = (value: Date | string) =>
     hour: '2-digit', minute: '2-digit'
   });
 
-export default function VideoTable({ initialVideos, page, total, totalPages, initialQuery = '', initialTags = [] }: { initialVideos: Video[]; page: number; total: number; totalPages: number; initialQuery?: string; initialTags?: string[] }) {
+export default function VideoTable({ initialVideos, page, total, totalPages, initialQuery = '', initialTags = [], sortField, sortOrder }: { initialVideos: Video[]; page: number; total: number; totalPages: number; initialQuery?: string; initialTags?: string[]; sortField: VideoSortField; sortOrder: VideoSortOrder }) {
   const router = useRouter();
-  // We use useMemo to force a re-render when initialVideos identity changes deeply
-  // NextJS router.refresh() updates Server Component props, but React might hold old state
-  // if we simply use useState.
   const [localVideos, setLocalVideos] = useState<Video[]>(initialVideos);
 
   useEffect(() => {
@@ -55,53 +53,18 @@ export default function VideoTable({ initialVideos, page, total, totalPages, ini
   const [filteredIds, setFilteredIds] = useState<Set<string> | null>(null);
   const [tagToAddSignal, setTagToAddSignal] = useState<{ tag: string; seq: number } | null>(null);
 
-  const [sortField, setSortField] = useState<keyof Video>('date');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-
-  const handleSort = (field: keyof Video) => {
-    if (sortField === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortOrder(field === 'createdAt' || field === 'uploadedAt' ? 'desc' : 'asc');
-    }
+  const handleSort = (field: VideoSortField) => {
+    const params = new URLSearchParams(window.location.search);
+    params.set('sort', field);
+    params.set('order', sortField === field ? (sortOrder === 'asc' ? 'desc' : 'asc') : (field === 'date' || field === 'uploadedAt' ? 'desc' : 'asc'));
+    params.delete('page');
+    router.push(`/admin?${params.toString()}`);
   };
 
-  const sortedVideos = useMemo(() => {
-    const list = [...localVideos];
-    list.sort((a, b) => {
-      let valA: any, valB: any;
-      if (sortField === 'title') {
-         valA = (a.title || a.filename).toLowerCase();
-         valB = (b.title || b.filename).toLowerCase();
-      } else if (sortField === 'duration') {
-         valA = a.duration || 0;
-         valB = b.duration || 0;
-      } else if (sortField === 'originalSize') {
-         valA = Number(a.processedSize || a.originalSize);
-         valB = Number(b.processedSize || b.originalSize);
-      } else if (sortField === 'createdAt') {
-         valA = new Date(a.createdAt).getTime();
-         valB = new Date(b.createdAt).getTime();
-      } else if (sortField === 'uploadedAt') {
-         valA = new Date(a.uploadedAt).getTime();
-         valB = new Date(b.uploadedAt).getTime();
-      } else if (sortField === 'date') {
-         valA = new Date(a.date || a.createdAt).getTime();
-         valB = new Date(b.date || b.createdAt).getTime();
-      }
-
-      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
-    });
-    return list;
-  }, [localVideos, sortField, sortOrder]);
-
   const visibleVideos = useMemo(() => {
-    if (!filteredIds) return sortedVideos;
-    return sortedVideos.filter((video) => filteredIds.has(video.id));
-  }, [sortedVideos, filteredIds]);
+    if (!filteredIds) return localVideos;
+    return localVideos.filter((video) => filteredIds.has(video.id));
+  }, [localVideos, filteredIds]);
 
   const searchItems = useMemo<SearchItem[]>(
     () =>
@@ -140,16 +103,15 @@ export default function VideoTable({ initialVideos, page, total, totalPages, ini
   }, [router]);
 
   const pageUrl = (nextPage: number) => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams(window.location.search);
     params.set('page', String(nextPage));
-    if (initialQuery.trim()) params.set('q', initialQuery.trim());
-    if (initialTags.length) params.set('tag', initialTags.join(','));
     return `/admin?${params.toString()}`;
   };
 
   const handleEditComplete = (updatedVideo: Video) => {
     setLocalVideos(localVideos.map(v => v.id === updatedVideo.id ? updatedVideo : v));
     setEditingVideo(null);
+    router.refresh();
   };
 
   const handleToggleVisibility = async (vid: Video) => {

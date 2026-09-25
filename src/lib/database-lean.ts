@@ -326,6 +326,8 @@ function mediaPaths(id: string, name: string, mediaType: MediaType) {
 }
 function mapVideo(row: VideoRow, tags: Tag[]): Video {
   const metadata = decodeJson(row.metadata);
+  const originalDate = typeof metadata?.created_at === "string" && !Number.isNaN(Date.parse(metadata.created_at))
+    ? metadata.created_at : row.created_at;
   const name = filename(metadata, row.id);
   const mediaType: MediaType = String(metadata?.contentType || "").startsWith("image/") ? "IMAGE" : "VIDEO";
   const paths = mediaPaths(row.id, name, mediaType);
@@ -337,15 +339,17 @@ function mapVideo(row: VideoRow, tags: Tag[]): Video {
       }
     : metadata;
   const [width, height] = dimensions(metadata);
-  return { id: row.id, title: row.title, status: row.status, size: Number(row.size), sha256Hash: row.sha256_hash, metadata, createdAt: new Date(row.created_at), uploadedAt: new Date(row.uploaded_at), deletedAt: row.deleted_at ? new Date(row.deleted_at) : null, isHidden: Boolean(row.is_hidden), tags, filename: name, description: row.description || "", mediaType, originalPath: paths.originalPath, processedPath: paths.processedPath, activePath: paths.activePath, originalMetadata: metadata, activeMetadata, originalSize: Number(metadata?.size || 0), processedSize: paths.processedPath ? Number(row.size) : 0, activeSize: Number(row.size), duration: typeof metadata?.duration === "number" ? metadata.duration : null, width, height, date: new Date(row.created_at), updatedAt: new Date(row.created_at) };
+  return { id: row.id, title: row.title, status: row.status, size: Number(row.size), sha256Hash: row.sha256_hash, metadata, createdAt: new Date(originalDate), uploadedAt: new Date(row.uploaded_at), deletedAt: row.deleted_at ? new Date(row.deleted_at) : null, isHidden: Boolean(row.is_hidden), tags, filename: name, description: row.description || "", mediaType, originalPath: paths.originalPath, processedPath: paths.processedPath, activePath: paths.activePath, originalMetadata: metadata, activeMetadata, originalSize: Number(metadata?.size || 0), processedSize: paths.processedPath ? Number(row.size) : 0, activeSize: Number(row.size), duration: typeof metadata?.duration === "number" ? metadata.duration : null, width, height, date: new Date(row.created_at), updatedAt: new Date(row.created_at) };
 }
 export function getVideo(id: string, withTags = true) { const row = database.query<VideoRow, [string]>("SELECT * FROM videos WHERE id=?").get(id); return row ? mapVideo(row, withTags ? tagsFor(id) : []) : null; }
 export function listDeletedVideos() {
   return database.query<VideoRow, []>("SELECT * FROM videos WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC").all().map((row) => mapVideo(row, tagsFor(row.id)));
 }
 export function findVideoIdByOriginalSha256(hash: string) { return database.query<{ id: string }, [string]>("SELECT id FROM videos WHERE sha256_hash=?").get(hash)?.id || null; }
-export function listVideos(options: { publicOnly?: boolean; limit?: number } = {}) { const filters = ["deleted_at IS NULL"]; if (options.publicOnly) filters.push("is_hidden=0"); const limit = options.limit ? ` LIMIT ${Math.max(1, Math.floor(options.limit))}` : ""; return database.query<VideoRow, []>(`SELECT * FROM videos WHERE ${filters.join(" AND ")} ORDER BY ${options.publicOnly ? "created_at" : "uploaded_at"} DESC${limit}`).all().map((row) => mapVideo(row, tagsFor(row.id))); }
-export function listVideosPage(options: { page?: number; limit?: number; query?: string; tags?: string[] } = {}) {
+export function listVideos(options: { publicOnly?: boolean; limit?: number } = {}) { const filters = ["deleted_at IS NULL"]; if (options.publicOnly) filters.push("is_hidden=0"); const limit = options.limit ? ` LIMIT ${Math.max(1, Math.floor(options.limit))}` : ""; return database.query<VideoRow, []>(`SELECT * FROM videos WHERE ${filters.join(" AND ")} ORDER BY created_at DESC, id DESC${limit}`).all().map((row) => mapVideo(row, tagsFor(row.id))); }
+export type VideoSortField = "title" | "duration" | "originalSize" | "date" | "uploadedAt";
+export type VideoSortOrder = "asc" | "desc";
+export function listVideosPage(options: { page?: number; limit?: number; query?: string; tags?: string[]; sortField?: VideoSortField; sortOrder?: VideoSortOrder } = {}) {
   const limit = Math.min(50, Math.max(1, Math.floor(options.limit || 50)));
   const requestedPage = options.page ?? 1;
   const page = Number.isFinite(requestedPage) ? Math.max(1, Math.floor(requestedPage)) : 1;
@@ -360,7 +364,16 @@ export function listVideosPage(options: { page?: number; limit?: number; query?:
   const total = Number(database.query<{ count: number }, any[]>(`SELECT COUNT(DISTINCT v.id) count FROM videos v LEFT JOIN video_tags vt ON vt.video_id=v.id LEFT JOIN tags t ON t.id=vt.tag_id WHERE ${where}`).get(...params)?.count || 0);
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const currentPage = Math.min(page, totalPages);
-  const rows = database.query<VideoRow, (string | number)[]>(`SELECT DISTINCT v.* FROM videos v LEFT JOIN video_tags vt ON vt.video_id=v.id LEFT JOIN tags t ON t.id=vt.tag_id WHERE ${where} ORDER BY v.uploaded_at DESC LIMIT ? OFFSET ?`).all(...params, limit, (currentPage - 1) * limit);
+  const sortColumns: Record<VideoSortField, string> = {
+    title: "LOWER(COALESCE(NULLIF(v.title, ''), json_extract(v.metadata, '$.filename')))",
+    duration: "CAST(json_extract(v.metadata, '$.duration') AS REAL)",
+    originalSize: "v.size",
+    date: "v.created_at",
+    uploadedAt: "v.uploaded_at",
+  };
+  const sortField = options.sortField && Object.hasOwn(sortColumns, options.sortField) ? options.sortField : "date";
+  const sortOrder = options.sortOrder === "asc" ? "ASC" : "DESC";
+  const rows = database.query<VideoRow, (string | number)[]>(`SELECT DISTINCT v.* FROM videos v LEFT JOIN video_tags vt ON vt.video_id=v.id LEFT JOIN tags t ON t.id=vt.tag_id WHERE ${where} ORDER BY ${sortColumns[sortField]} ${sortOrder}, v.id DESC LIMIT ? OFFSET ?`).all(...params, limit, (currentPage - 1) * limit);
   return { items: rows.map((row) => mapVideo(row, tagsFor(row.id))), page: currentPage, limit, total, totalPages };
 }
 
@@ -375,7 +388,7 @@ export function createVideo(input: VideoInput) {
 export function updateVideo(id: string, updates: Omit<Partial<Video>, "tags"> & Record<string, unknown> & { tags?: string[] }) {
   const metadata = (updates.metadata || updates.originalMetadata) as Record<string, unknown> | undefined;
   const setters: string[] = []; const values: unknown[] = []; const add = (key: string, value: unknown) => { setters.push(`${key}=?`); values.push(value); };
-  if (Object.hasOwn(updates, "title")) add("title", updates.title); if (Object.hasOwn(updates, "description")) add("description", updates.description ?? ""); if (Object.hasOwn(updates, "status")) add("status", updates.status); if (Object.hasOwn(updates, "size")) add("size", updates.size); else if (Object.hasOwn(updates, "activeSize")) add("size", updates.activeSize); if (Object.hasOwn(updates, "sha256Hash")) add("sha256_hash", updates.sha256Hash); if (metadata) add("metadata", JSON.stringify(metadata)); if (Object.hasOwn(updates, "createdAt")) add("created_at", dateValue(updates.createdAt)); if (Object.hasOwn(updates, "uploadedAt")) add("uploaded_at", dateValue(updates.uploadedAt)); if (Object.hasOwn(updates, "deletedAt")) add("deleted_at", updates.deletedAt ? dateValue(updates.deletedAt) : null); if (Object.hasOwn(updates, "isHidden")) add("is_hidden", Number(updates.isHidden));
+  if (Object.hasOwn(updates, "title")) add("title", updates.title); if (Object.hasOwn(updates, "description")) add("description", updates.description ?? ""); if (Object.hasOwn(updates, "status")) add("status", updates.status); if (Object.hasOwn(updates, "size")) add("size", updates.size); else if (Object.hasOwn(updates, "activeSize")) add("size", updates.activeSize); if (Object.hasOwn(updates, "sha256Hash")) add("sha256_hash", updates.sha256Hash); if (metadata) add("metadata", JSON.stringify(metadata)); if (Object.hasOwn(updates, "createdAt") || Object.hasOwn(updates, "date")) add("created_at", dateValue(updates.date ?? updates.createdAt)); if (Object.hasOwn(updates, "uploadedAt")) add("uploaded_at", dateValue(updates.uploadedAt)); if (Object.hasOwn(updates, "deletedAt")) add("deleted_at", updates.deletedAt ? dateValue(updates.deletedAt) : null); if (Object.hasOwn(updates, "isHidden")) add("is_hidden", Number(updates.isHidden));
   if (setters.length) { values.push(id); database.query(`UPDATE videos SET ${setters.join(",")} WHERE id=?`).run(...(values as any[])); }
   if (updates.tags) replaceTags(id, updates.tags);
   return getVideo(id);

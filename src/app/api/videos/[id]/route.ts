@@ -36,7 +36,7 @@ export async function PATCH(
     if (description !== undefined)
       updateData.description = typeof description === "string" ? description.trim() : "";
     if (isHidden !== undefined) updateData.isHidden = isHidden;
-    if (date !== undefined) updateData.createdAt = new Date(date);
+    if (date !== undefined) updateData.date = new Date(date);
 
     // Handle Tags (Many-to-Many relation)
     if (Array.isArray(tags)) {

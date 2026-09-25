@@ -4,6 +4,8 @@ import {
   deleteVideo,
   findVideoIdByOriginalSha256,
   listVideosPage,
+  listVideos,
+  updateVideo,
 } from "./database";
 import { hashBytes } from "./hash";
 
@@ -39,6 +41,42 @@ test("original upload hashes are unique in SQLite", () => {
   } finally {
     deleteVideo(firstId);
     deleteVideo(duplicateId);
+  }
+});
+
+test("date and upload sorting span pages and preserve the original media date", () => {
+  const ids = Array.from({ length: 3 }, () => crypto.randomUUID());
+  const title = `sort-${ids[0]}`;
+  const originals = ["2023-01-01", "2025-01-01", "2024-01-01"].map((day) => new Date(`${day}T12:00:00Z`));
+  const uploads = ["2025-02-01", "2023-02-01", "2024-02-01"].map((day) => new Date(`${day}T12:00:00Z`));
+
+  try {
+    ids.forEach((id, index) => createVideo({
+      id, title, filename: `${id}.mp4`, status: "QUEUED",
+      originalSha256: hashBytes(new TextEncoder().encode(id)), originalSize: 1,
+      createdAt: originals[index], uploadedAt: uploads[index], isHidden: false,
+    }));
+
+    const page = (number: number, sortField: "date" | "uploadedAt" = "date") =>
+      listVideosPage({ page: number, limit: 2, query: title, sortField });
+    expect(page(1).items.map((video) => video.id)).toEqual([ids[1], ids[2]]);
+    expect(page(2).items.map((video) => video.id)).toEqual([ids[0]]);
+    expect(listVideosPage({ page: 1, limit: 2, query: title, sortField: "date", sortOrder: "asc" }).items.map((video) => video.id)).toEqual([ids[0], ids[2]]);
+    expect(page(1, "uploadedAt").items.map((video) => video.id)).toEqual([ids[0], ids[2]]);
+    expect(page(2, "uploadedAt").items.map((video) => video.id)).toEqual([ids[1]]);
+
+    const custom = new Date("2026-01-01T12:00:00Z");
+    updateVideo(ids[0], { date: custom });
+    expect(page(1).items[0].id).toBe(ids[0]);
+    expect(page(1).items[0].createdAt).toEqual(originals[0]);
+    expect(page(1).items[0].date).toEqual(custom);
+    expect(page(1, "uploadedAt").items.map((video) => video.id)).toEqual([ids[0], ids[2]]);
+    expect(listVideos({ publicOnly: true }).filter((video) => ids.includes(video.id))[0].id).toBe(ids[0]);
+
+    updateVideo(ids[0], { date: originals[0] });
+    expect(page(2).items[0].id).toBe(ids[0]);
+  } finally {
+    ids.forEach(deleteVideo);
   }
 });
 
