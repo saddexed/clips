@@ -49,7 +49,3 @@ The worker claims one durable SQLite job at a time. Jobs interrupted by a proces
 ## Migration Note
 
 This migration creates a new SQLite database. Export existing PostgreSQL records before retiring the old deployment if its library or history must be retained; PostgreSQL data cannot be read directly from `clips.db`.
-
-
-prerequrisits:
-ffmpeg in path

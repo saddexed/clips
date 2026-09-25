@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { SiteHeader } from "@/components/SiteHeader";
 import ActionBar from "./ActionBar";
 import { cn } from "@/lib/utils";
+import { tagTint } from "@/lib/ui-classes";
 import SafeVideoPlayer from "@/components/SafeVideoPlayer";
 
 export async function generateMetadata({
@@ -100,13 +101,13 @@ export default async function WatchPage({
           )}
         </div>
 
-        <section className="flex flex-col gap-5">
-          <div
-            className={cn(
-              "flex flex-col gap-4 md:flex-row md:items-end md:justify-between",
-              (video.description || video.tags.length > 0) && "border-b border-line-soft pb-5",
-            )}
-          >
+        <section
+          className={cn(
+            "flex flex-col gap-3",
+            (video.description || video.tags.length > 0) && "border-b border-line-soft pb-5",
+          )}
+        >
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="flex min-w-0 flex-col gap-2">
               <p className="font-mono text-[0.6875rem] uppercase tracking-[0.08em] text-muted">
                 {meta.join("  ·  ")}
@@ -119,7 +120,7 @@ export default async function WatchPage({
           </div>
 
           {video.description && (
-            <p className="max-w-prose whitespace-pre-wrap leading-relaxed text-ink/90">
+            <p className="max-w-prose whitespace-pre-wrap text-[0.95rem] leading-relaxed text-muted">
               {video.description}
             </p>
           )}
@@ -129,7 +130,10 @@ export default async function WatchPage({
               {video.tags.map((tag) => (
                 <li
                   key={tag.id}
-                  className="rounded-full bg-chip px-3 py-1 font-mono text-xs lowercase text-chip-ink"
+                  className={cn(
+                    "rounded-full px-3 py-1 font-mono text-xs lowercase text-chip-ink",
+                    tagTint(tag.name),
+                  )}
                 >
                   #{tag.name.replace(/_/g, " ").replace(/\s+/g, " ").trim()}
                 </li>

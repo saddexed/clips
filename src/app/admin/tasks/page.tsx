@@ -153,7 +153,7 @@ export default function TasksPage() {
                   <td className="font-mono text-xs text-muted">#{job.id}</td>
                   <td className="max-w-[22rem]">
                     <div className={cn('truncate font-medium', job.title ? 'text-ink' : 'italic text-muted')}>{job.title || 'Deleted video'}</div>
-                    <div className="mt-0.5 truncate font-mono text-[0.6875rem] text-muted">{job.videoId || '—'}</div>
+                    <div className="mt-0.5 truncate font-mono text-[0.6875rem] text-muted">{job.videoId || '-'}</div>
                   </td>
                   <td className="min-w-[16rem]">
                     <JobProgress job={job} />

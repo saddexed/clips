@@ -74,7 +74,7 @@ export function VideoThumbnail({
         />
       ) : (
         <>
-          {/* Thumbnail always visible underneath — prevents black flash */}
+          {/* Thumbnail always visible underneath - prevents black flash */}
           <img
             src={thumbSrc}
             alt=""
@@ -82,7 +82,7 @@ export function VideoThumbnail({
             loading="lazy"
           />
 
-          {/* Play affordance — fades out once the preview is ready */}
+          {/* Play affordance - fades out once the preview is ready */}
           <div
             className={cn(
               "pointer-events-none absolute inset-0 grid place-items-center transition-opacity duration-300",
@@ -94,7 +94,7 @@ export function VideoThumbnail({
             </div>
           </div>
 
-          {/* Video — mounted on hover, fades in only once first frame is ready */}
+          {/* Video - mounted on hover, fades in only once first frame is ready */}
           {isHovered && (
             <video
               ref={handleRef}
@@ -111,7 +111,7 @@ export function VideoThumbnail({
             />
           )}
 
-          {/* Mute toggle — shown only while video is playing */}
+          {/* Mute toggle - shown only while video is playing */}
           {isHovered && videoReady && (
             <button
               onPointerDown={(e) => e.stopPropagation()}

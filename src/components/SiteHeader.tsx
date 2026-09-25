@@ -7,10 +7,13 @@ export function SiteHeader({
   backHref,
   narrow = false,
   children,
+  actions,
 }: {
   backHref?: string;
   narrow?: boolean;
   children?: React.ReactNode;
+  /** Sits to the left of the theme toggle. */
+  actions?: React.ReactNode;
 }) {
   return (
     <header className="sticky top-0 z-20 border-b border-line-soft bg-bg/80 backdrop-blur-xl">
@@ -49,7 +52,8 @@ export function SiteHeader({
           </div>
         ) : null}
 
-        <div className="ml-auto flex items-center">
+        <div className="ml-auto flex items-center gap-1.5">
+          {actions}
           <ThemeToggle />
         </div>
       </div>

@@ -3,9 +3,8 @@
 import { useTheme } from "next-themes";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
 
-const OPTIONS = [
+const CYCLE = [
   { value: "light", label: "Light", icon: Sun },
   { value: "dark", label: "Dark", icon: Moon },
   { value: "system", label: "System", icon: Monitor },
@@ -19,32 +18,22 @@ export function ThemeToggle() {
     setMounted(true);
   }, []);
 
+  const index = Math.max(0, CYCLE.findIndex((option) => option.value === theme));
+  const current = CYCLE[index];
+  const next = CYCLE[(index + 1) % CYCLE.length];
+  const Icon = current.icon;
+
   return (
-    <div
-      role="radiogroup"
-      aria-label="Theme"
-      className="flex items-center gap-0.5 rounded-full border border-line-soft bg-surface p-0.5"
+    <button
+      type="button"
+      onClick={() => setTheme(next.value)}
+      // The stored theme is unknown on the server, so the icon and labels stay out
+      // of the first render and appear once mounted. Otherwise the markup mismatches.
+      title={mounted ? `Theme: ${current.label} - switch to ${next.label}` : "Theme"}
+      aria-label={mounted ? `Theme: ${current.label}. Switch to ${next.label}` : "Theme"}
+      className="grid size-8 cursor-pointer place-items-center rounded-full border border-line-soft bg-surface text-muted transition-colors hover:text-ink"
     >
-      {OPTIONS.map(({ value, label, icon: Icon }) => {
-        const active = mounted && theme === value;
-        return (
-          <button
-            key={value}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            aria-label={label}
-            title={label}
-            onClick={() => setTheme(value)}
-            className={cn(
-              "grid size-7 cursor-pointer place-items-center rounded-full text-muted transition-colors hover:text-ink",
-              active && "bg-chip text-chip-ink dark:bg-line dark:text-ink",
-            )}
-          >
-            <Icon size={14} strokeWidth={2.25} />
-          </button>
-        );
-      })}
-    </div>
+      {mounted ? <Icon size={15} strokeWidth={2.25} /> : <span className="size-[15px]" />}
+    </button>
   );
 }

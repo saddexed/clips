@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import SearchBar, { type SearchItem } from "@/components/SearchBar";
 import { SiteHeader } from "@/components/SiteHeader";
 import { VideoThumbnail } from "@/components/VideoThumbnail";
+import { SiteFooter } from "@/components/SiteFooter";
+import { tagTint } from "@/lib/ui-classes";
+import { cn } from "@/lib/utils";
 
 type GalleryVideo = SearchItem & {
   date: string | Date;
@@ -14,9 +17,24 @@ type GalleryVideo = SearchItem & {
 
 const displayTagName = (name: string) => name.replace(/_/g, " ").replace(/\s+/g, " ").trim();
 
+const DENSITY_KEY = "clipsGridDensity";
+
 export default function VideoGallery({ initialVideos }: { initialVideos: GalleryVideo[] }) {
   const [filteredVideos, setFilteredVideos] = useState<GalleryVideo[]>(initialVideos);
   const [tagToAddSignal, setTagToAddSignal] = useState<{ tag: string; seq: number } | null>(null);
+  const [perRow, setPerRow] = useState<3 | 4>(3);
+
+  useEffect(() => {
+    setPerRow(localStorage.getItem(DENSITY_KEY) === "4" ? 4 : 3);
+  }, []);
+
+  const toggleDensity = () => {
+    setPerRow((prev) => {
+      const next = prev === 3 ? 4 : 3;
+      localStorage.setItem(DENSITY_KEY, String(next));
+      return next;
+    });
+  };
 
   const searchItems = useMemo<SearchItem[]>(
     () =>
@@ -41,7 +59,19 @@ export default function VideoGallery({ initialVideos }: { initialVideos: Gallery
 
   return (
     <>
-      <SiteHeader>
+      <SiteHeader
+        actions={
+          <button
+            type="button"
+            onClick={toggleDensity}
+            title={`${perRow} per row - switch to ${perRow === 3 ? 4 : 3}`}
+            aria-label={`${perRow} clips per row. Switch to ${perRow === 3 ? 4 : 3} per row`}
+            className="hidden h-8 cursor-pointer items-center rounded-full border border-line-soft bg-surface px-2.5 font-mono text-xs text-muted transition-colors hover:text-ink lg:inline-flex"
+          >
+            {perRow}x
+          </button>
+        }
+      >
         <SearchBar
           items={searchItems}
           onResultsChange={handleResultsChange}
@@ -63,7 +93,12 @@ export default function VideoGallery({ initialVideos }: { initialVideos: Gallery
           No clips match. Remove a tag or change the search.
         </div>
       ) : (
-        <ul className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+        <ul
+          className={cn(
+            "grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3",
+            perRow === 4 && "xl:grid-cols-4",
+          )}
+        >
           {filteredVideos.map((video) => (
             <li key={video.id}>
               <Link
@@ -84,14 +119,17 @@ export default function VideoGallery({ initialVideos }: { initialVideos: Gallery
                     {video.title || video.filename}
                   </h3>
                   {video.tags && video.tags.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-nowrap items-center gap-1.5 overflow-hidden">
                       {video.tags.slice(0, 3).map((tag) => {
                         const displayTag = displayTagName(tag.name);
                         return (
                           <button
                             key={`${video.id}-${tag.name}`}
                             type="button"
-                            className="cursor-pointer rounded-full font-mono text-[0.6875rem] lowercase text-muted transition-colors hover:text-ink"
+                            className={cn(
+                              "min-w-0 cursor-pointer truncate rounded-full px-2 py-0.5 font-mono text-[0.6875rem] lowercase text-chip-ink transition-opacity hover:opacity-80",
+                              tagTint(tag.name),
+                            )}
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
@@ -107,7 +145,9 @@ export default function VideoGallery({ initialVideos }: { initialVideos: Gallery
                         );
                       })}
                       {video.tags.length > 3 ? (
-                        <span className="font-mono text-[0.6875rem] text-muted/70">+{video.tags.length - 3}</span>
+                        <span className="shrink-0 font-mono text-[0.6875rem] text-muted/70">
+                          +{video.tags.length - 3}
+                        </span>
                       ) : null}
                     </div>
                   ) : null}
@@ -118,6 +158,8 @@ export default function VideoGallery({ initialVideos }: { initialVideos: Gallery
           </ul>
         )}
       </main>
+
+      <SiteFooter />
     </>
   );
 }

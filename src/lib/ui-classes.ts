@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-// Plain class helpers — safe to call from both server and client components.
+// Plain class helpers - safe to call from both server and client components.
 
 type ButtonVariant = "solid" | "soft" | "ghost" | "danger";
 type ButtonSize = "sm" | "md" | "icon" | "icon-sm";
@@ -25,6 +25,19 @@ export const inputClass =
 export const labelClass = "font-mono text-[0.6875rem] uppercase tracking-[0.08em] text-muted";
 
 export const panelClass = "rounded-2xl bg-surface ring-1 ring-line-soft";
+
+// Tag chips get a tint keyed off the tag name, so the same tag is always the same
+// shade and neighbouring tags are usually different ones. Listed literally so the
+// Tailwind scanner picks the classes up.
+const TAG_TINTS = ["bg-tag-1", "bg-tag-2", "bg-tag-3", "bg-tag-4", "bg-tag-5"] as const;
+
+export function tagTint(name: string) {
+  let hash = 0;
+  for (let index = 0; index < name.length; index += 1) {
+    hash = (hash * 31 + name.charCodeAt(index)) >>> 0;
+  }
+  return TAG_TINTS[hash % TAG_TINTS.length];
+}
 
 export const tableClass = cn(
   "w-full border-collapse text-left text-sm",

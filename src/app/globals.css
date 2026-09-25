@@ -34,6 +34,13 @@
   --restore: #6b4fa0;
   --show: #0e7896;
   --hide: #5b6474;
+
+  /* Tag tints: shades of the pink/alabaster family, cycled so adjacent chips differ */
+  --tag-1: #ffcad4;
+  --tag-2: #f7b7c2;
+  --tag-3: #e8c4c9;
+  --tag-4: #d8e2dc;
+  --tag-5: #e7d3d7;
 }
 
 .dark {
@@ -60,6 +67,12 @@
   --restore: #c3a6f0;
   --show: #7dd3ee;
   --hide: #b3bccb;
+
+  --tag-1: #2c3e56;
+  --tag-2: #35506e;
+  --tag-3: #3d4a63;
+  --tag-4: #2a4257;
+  --tag-5: #45566f;
 }
 
 @theme inline {
@@ -83,6 +96,11 @@
   --color-restore: var(--restore);
   --color-show: var(--show);
   --color-hide: var(--hide);
+  --color-tag-1: var(--tag-1);
+  --color-tag-2: var(--tag-2);
+  --color-tag-3: var(--tag-3);
+  --color-tag-4: var(--tag-4);
+  --color-tag-5: var(--tag-5);
 
   /* Watch page: largest 16:9 player that leaves room for header + title row */
   --container-player: min(100rem, max(40rem, calc((100svh - 13rem) * 16 / 9)));

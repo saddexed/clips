@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ExternalLink, LogOut } from 'lucide-react';
+import { Home, LogOut } from 'lucide-react';
 import '../globals.css';
 import { GlobalUploadProvider } from '@/components/GlobalUploadProvider';
 import AdminReloadButton from '@/components/AdminReloadButton';
@@ -33,8 +33,8 @@ export default function AdminLayout({
 
             <div className="ml-auto flex items-center gap-1.5">
               <AdminReloadButton />
-              <Link href="/" title="View site" aria-label="View site" className={btn('ghost', 'icon-sm')}>
-                <ExternalLink size={16} />
+              <Link href="/" title="Home" aria-label="Home" className={btn('ghost', 'icon-sm')}>
+                <Home size={16} />
               </Link>
               <a href="/api/auth/logout" title="Log out" aria-label="Log out" className={btn('ghost', 'icon-sm')}>
                 <LogOut size={16} />

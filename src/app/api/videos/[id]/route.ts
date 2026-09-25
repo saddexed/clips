@@ -19,7 +19,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, tags, isHidden, date } = body;
+    const { title, description, tags, isHidden, date } = body;
 
     const existingVideo = await repository.video.findUnique({
       where: { id },
@@ -33,6 +33,8 @@ export async function PATCH(
     // Build the update query dynamically
     const updateData: any = {};
     if (title !== undefined) updateData.title = title;
+    if (description !== undefined)
+      updateData.description = typeof description === "string" ? description.trim() : "";
     if (isHidden !== undefined) updateData.isHidden = isHidden;
     if (date !== undefined) updateData.createdAt = new Date(date);
 

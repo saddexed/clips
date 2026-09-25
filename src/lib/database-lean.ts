@@ -60,6 +60,7 @@ type VideoRow = {
   size: number;
   sha256_hash: string | null;
   metadata: string | null;
+  description: string | null;
   created_at: string;
   uploaded_at: string;
   deleted_at: string | null;
@@ -83,9 +84,13 @@ type HistoryRow = {
 };
 
 function databasePath() {
-  const url = process.env.DATABASE_URL || "file:./data/clips.db";
-  if (!url.startsWith("file:")) throw new Error("DATABASE_URL must be a SQLite file URL");
-  return path.resolve(process.cwd(), url.slice(5));
+  const configured = process.env.DB?.trim() || "./data/clips.db";
+  // A plain path is the documented form; a file: URL still works, but a driver
+  // connection string left over from another database would not.
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(configured)) {
+    throw new Error("DB must be a SQLite file path, not a connection URL");
+  }
+  return path.resolve(process.cwd(), configured.replace(/^file:/, ""));
 }
 
 function now() { return new Date().toISOString(); }
@@ -175,12 +180,18 @@ function createVideos() {
 CREATE TABLE IF NOT EXISTS videos (
   id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'UPLOADING',
   size INTEGER NOT NULL DEFAULT 0, sha256_hash TEXT, metadata TEXT NOT NULL DEFAULT '{}',
+  description TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL, uploaded_at TEXT NOT NULL, deleted_at TEXT, is_hidden INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS videos_status_idx ON videos(status);
 CREATE INDEX IF NOT EXISTS videos_created_idx ON videos(created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS videos_sha256_hash_idx ON videos(sha256_hash) WHERE sha256_hash IS NOT NULL;
 `);
+}
+
+function migrateVideoDescription() {
+  if (columns("videos").has("description")) return;
+  database.exec("ALTER TABLE videos ADD COLUMN description TEXT NOT NULL DEFAULT '';");
 }
 
 function migrateLegacy() {
@@ -224,14 +235,20 @@ if (videoColumns.has("original_path")) {
 } else {
   createVideos();
 }
+migrateVideoDescription();
 migrateQueueJobIds();
 removeLegacyArtifactsTable();
 database.exec(`
 CREATE TABLE IF NOT EXISTS video_tags (video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE, tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE, PRIMARY KEY(video_id, tag_id));
 CREATE INDEX IF NOT EXISTS job_history_video_id_idx ON job_history(video_id);
 CREATE INDEX IF NOT EXISTS job_history_status_idx ON job_history(status);
+CREATE INDEX IF NOT EXISTS job_history_started_idx ON job_history(started_at);
 CREATE INDEX IF NOT EXISTS queue_jobs_status_created_idx ON queue_jobs(status, created_at);
 CREATE INDEX IF NOT EXISTS trash_items_deleted_at_idx ON trash_items(deleted_at);
+CREATE INDEX IF NOT EXISTS video_tags_tag_id_idx ON video_tags(tag_id);
+CREATE INDEX IF NOT EXISTS videos_uploaded_idx ON videos(uploaded_at);
+CREATE INDEX IF NOT EXISTS videos_live_uploaded_idx ON videos(uploaded_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS videos_deleted_at_idx ON videos(deleted_at) WHERE deleted_at IS NOT NULL;
 `);
 
 function tagsFor(videoId: string) {
@@ -320,7 +337,7 @@ function mapVideo(row: VideoRow, tags: Tag[]): Video {
       }
     : metadata;
   const [width, height] = dimensions(metadata);
-  return { id: row.id, title: row.title, status: row.status, size: Number(row.size), sha256Hash: row.sha256_hash, metadata, createdAt: new Date(row.created_at), uploadedAt: new Date(row.uploaded_at), deletedAt: row.deleted_at ? new Date(row.deleted_at) : null, isHidden: Boolean(row.is_hidden), tags, filename: name, description: "", mediaType, originalPath: paths.originalPath, processedPath: paths.processedPath, activePath: paths.activePath, originalMetadata: metadata, activeMetadata, originalSize: Number(metadata?.size || 0), processedSize: paths.processedPath ? Number(row.size) : 0, activeSize: Number(row.size), duration: typeof metadata?.duration === "number" ? metadata.duration : null, width, height, date: new Date(row.created_at), updatedAt: new Date(row.created_at) };
+  return { id: row.id, title: row.title, status: row.status, size: Number(row.size), sha256Hash: row.sha256_hash, metadata, createdAt: new Date(row.created_at), uploadedAt: new Date(row.uploaded_at), deletedAt: row.deleted_at ? new Date(row.deleted_at) : null, isHidden: Boolean(row.is_hidden), tags, filename: name, description: row.description || "", mediaType, originalPath: paths.originalPath, processedPath: paths.processedPath, activePath: paths.activePath, originalMetadata: metadata, activeMetadata, originalSize: Number(metadata?.size || 0), processedSize: paths.processedPath ? Number(row.size) : 0, activeSize: Number(row.size), duration: typeof metadata?.duration === "number" ? metadata.duration : null, width, height, date: new Date(row.created_at), updatedAt: new Date(row.created_at) };
 }
 export function getVideo(id: string, withTags = true) { const row = database.query<VideoRow, [string]>("SELECT * FROM videos WHERE id=?").get(id); return row ? mapVideo(row, withTags ? tagsFor(id) : []) : null; }
 export function listDeletedVideos() {
@@ -347,18 +364,18 @@ export function listVideosPage(options: { page?: number; limit?: number; query?:
   return { items: rows.map((row) => mapVideo(row, tagsFor(row.id))), page: currentPage, limit, total, totalPages };
 }
 
-type VideoInput = { id: string; title: string; status: VideoStatus; size?: number; sha256Hash?: string | null; originalSha256?: string | null; metadata?: Record<string, unknown> | null; originalMetadata?: Record<string, unknown> | null; activeSize?: number; filename?: string; originalSize?: number; createdAt: Date; uploadedAt: Date; deletedAt?: Date | null; isHidden: boolean; tags?: string[] };
+type VideoInput = { id: string; title: string; description?: string; status: VideoStatus; size?: number; sha256Hash?: string | null; originalSha256?: string | null; metadata?: Record<string, unknown> | null; originalMetadata?: Record<string, unknown> | null; activeSize?: number; filename?: string; originalSize?: number; createdAt: Date; uploadedAt: Date; deletedAt?: Date | null; isHidden: boolean; tags?: string[] };
 export function createVideo(input: VideoInput) {
   const metadata = input.metadata || input.originalMetadata || { filename: input.filename || `${input.id}.webm`, id: input.id, hash: input.sha256Hash || input.originalSha256 || "", contentType: "video/*", size: input.originalSize || input.size || 0, created_at: input.createdAt.toISOString(), uploaded_at: input.uploadedAt.toISOString() };
   const metadataHash = typeof metadata.hash === "string" ? metadata.hash : null;
   const activeSize = input.activeSize ?? input.size ?? input.originalSize ?? Number(metadata.size || 0);
-  database.transaction(() => { database.query("INSERT INTO videos(id,title,status,size,sha256_hash,metadata,created_at,uploaded_at,deleted_at,is_hidden) VALUES(?,?,?,?,?,?,?,?,?,?)").run(input.id, input.title, input.status, activeSize, input.sha256Hash || input.originalSha256 || metadataHash, JSON.stringify(metadata), input.createdAt.toISOString(), input.uploadedAt.toISOString(), input.deletedAt?.toISOString() || null, Number(input.isHidden)); replaceTags(input.id, input.tags || []); })();
+  database.transaction(() => { database.query("INSERT INTO videos(id,title,description,status,size,sha256_hash,metadata,created_at,uploaded_at,deleted_at,is_hidden) VALUES(?,?,?,?,?,?,?,?,?,?,?)").run(input.id, input.title, input.description || "", input.status, activeSize, input.sha256Hash || input.originalSha256 || metadataHash, JSON.stringify(metadata), input.createdAt.toISOString(), input.uploadedAt.toISOString(), input.deletedAt?.toISOString() || null, Number(input.isHidden)); replaceTags(input.id, input.tags || []); })();
   return getVideo(input.id)!;
 }
 export function updateVideo(id: string, updates: Omit<Partial<Video>, "tags"> & Record<string, unknown> & { tags?: string[] }) {
   const metadata = (updates.metadata || updates.originalMetadata) as Record<string, unknown> | undefined;
   const setters: string[] = []; const values: unknown[] = []; const add = (key: string, value: unknown) => { setters.push(`${key}=?`); values.push(value); };
-  if (Object.hasOwn(updates, "title")) add("title", updates.title); if (Object.hasOwn(updates, "status")) add("status", updates.status); if (Object.hasOwn(updates, "size")) add("size", updates.size); else if (Object.hasOwn(updates, "activeSize")) add("size", updates.activeSize); if (Object.hasOwn(updates, "sha256Hash")) add("sha256_hash", updates.sha256Hash); if (metadata) add("metadata", JSON.stringify(metadata)); if (Object.hasOwn(updates, "createdAt")) add("created_at", dateValue(updates.createdAt)); if (Object.hasOwn(updates, "uploadedAt")) add("uploaded_at", dateValue(updates.uploadedAt)); if (Object.hasOwn(updates, "deletedAt")) add("deleted_at", updates.deletedAt ? dateValue(updates.deletedAt) : null); if (Object.hasOwn(updates, "isHidden")) add("is_hidden", Number(updates.isHidden));
+  if (Object.hasOwn(updates, "title")) add("title", updates.title); if (Object.hasOwn(updates, "description")) add("description", updates.description ?? ""); if (Object.hasOwn(updates, "status")) add("status", updates.status); if (Object.hasOwn(updates, "size")) add("size", updates.size); else if (Object.hasOwn(updates, "activeSize")) add("size", updates.activeSize); if (Object.hasOwn(updates, "sha256Hash")) add("sha256_hash", updates.sha256Hash); if (metadata) add("metadata", JSON.stringify(metadata)); if (Object.hasOwn(updates, "createdAt")) add("created_at", dateValue(updates.createdAt)); if (Object.hasOwn(updates, "uploadedAt")) add("uploaded_at", dateValue(updates.uploadedAt)); if (Object.hasOwn(updates, "deletedAt")) add("deleted_at", updates.deletedAt ? dateValue(updates.deletedAt) : null); if (Object.hasOwn(updates, "isHidden")) add("is_hidden", Number(updates.isHidden));
   if (setters.length) { values.push(id); database.query(`UPDATE videos SET ${setters.join(",")} WHERE id=?`).run(...(values as any[])); }
   if (updates.tags) replaceTags(id, updates.tags);
   return getVideo(id);

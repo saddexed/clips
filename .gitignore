@@ -5,6 +5,9 @@ node_modules/
 .next/
 out/
 
+# TypeScript build cache
+tsconfig.tsbuildinfo
+
 # Production
 build/
 
@@ -31,5 +34,6 @@ temp.txt
 .agents/
 data/
 misc/
+.screenshots/
 
 *.md

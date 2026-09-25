@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Pencil, X, Save, AlertCircle, CheckCircle, Clock, Activity, AlertTriangle, Eye, EyeOff, Trash2, ArrowUpDown, ChevronUp, ChevronDown, History as HistoryIcon } from 'lucide-react';
+import { Pencil, X, Save, AlertCircle, CheckCircle, Clock, Activity, AlertTriangle, Eye, EyeOff, Trash2, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import SafeVideoPlayer from '@/components/SafeVideoPlayer';
 import SearchBar, { type SearchItem } from '@/components/SearchBar';
@@ -14,6 +14,7 @@ type Video = {
   id: string;
   filename: string;
   title: string;
+  description?: string;
   status: string;
   activePath?: string;
   mediaType?: string;
@@ -252,11 +253,11 @@ export default function VideoTable({ initialVideos, page, total, totalPages, ini
                         })}
                       </div>
                     ) : (
-                      <span className="text-muted">—</span>
+                      <span className="text-muted">-</span>
                     )}
                   </td>
                   <td className="whitespace-nowrap font-mono text-xs">
-                    <div className="text-ink">{vid.duration ? formatDuration(vid.duration) : '—'}</div>
+                    <div className="text-ink">{vid.duration ? formatDuration(vid.duration) : '-'}</div>
                     <div className="text-muted">{vid.width && vid.height ? `${vid.width}×${vid.height}` : ''}</div>
                   </td>
                   <td className="whitespace-nowrap font-mono text-xs text-muted">
@@ -330,6 +331,7 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
   const normalizeTag = (input: string) => input.trim().toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').replace(/[^a-z0-9\s-_]/g, '');
 
   const [title, setTitle] = useState(video.title);
+  const [description, setDescription] = useState(video.description || '');
   const [selectedTags, setSelectedTags] = useState<string[]>(
     (video.tags || [])
       .map((t) => normalizeTag(t.name))
@@ -414,6 +416,7 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title,
+          description,
           tags: tagsArray,
           date: new Date(payloadDate).toISOString(),
         })
@@ -485,7 +488,7 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
           options={[
             { value: 'edit', label: 'Edit' },
             { value: 'metadata', label: 'Metadata' },
-            { value: 'history', label: <><HistoryIcon size={14} />History</> },
+            { value: 'history', label: 'History' },
           ]}
         />
 
@@ -531,6 +534,17 @@ function EditVideoModal({ video, allTags, onClose, onSave, onDelete }: { video: 
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   className={inputClass}
+                />
+              </label>
+
+              <label className="flex flex-col gap-2">
+                <span className={labelClass}>Description</span>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  placeholder="Add a short description for this clip."
+                  className={cn(inputClass, 'h-auto resize-y py-2 leading-relaxed')}
                 />
               </label>
 
