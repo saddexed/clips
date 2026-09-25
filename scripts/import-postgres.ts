@@ -117,6 +117,18 @@ async function copyInto(source: string, target: string) {
 }
 
 const dataPath = getDataPath();
+
+// Every original being absent means the data root is wrong far more often than it
+// means the media is gone, so refuse before writing history and settings rows.
+if (payload.videos.length && !payload.videos.some((video) => {
+  const resolved = resolveStoredPath(video.originalPath);
+  return Boolean(resolved && existsSync(resolved));
+})) {
+  throw new Error(
+    `No original media resolved under ${dataPath}. Set DATA_PATH to the directory the old deployment mounted at /app/data, for example DATA_PATH=/mnt/video_storage.`,
+  );
+}
+
 const counts = {
   imported: 0,
   skippedMissingOriginal: 0,
@@ -245,6 +257,7 @@ for (const setting of payload.app_settings || []) {
 }
 
 console.log(confirm ? "Import complete." : "Dry run - nothing was written. Re-run with --confirm.");
+console.log(`  data root   ${dataPath}`);
 console.log(`  videos      ${counts.imported} of ${payload.videos.length}`);
 console.log(`  tags        ${tagNames.size} distinct, ${payload.video_tags.length} links`);
 console.log(`  history     ${historyImported} rows (${historyOrphaned} orphaned to null)`);
