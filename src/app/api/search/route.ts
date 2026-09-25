@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { search } from "@/lib/database";
+import { requireAdmin } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,7 +13,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ tags: [], videos: [] });
     }
 
-    const isAdmin = context === "admin";
+    let isAdmin = false;
+    if (context === "admin") {
+      const unauthorized = await requireAdmin(request);
+      if (unauthorized) return unauthorized;
+      isAdmin = true;
+    }
     const result = search(q, isAdmin, "date", "desc");
 
     return NextResponse.json(result);

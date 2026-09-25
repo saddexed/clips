@@ -8,9 +8,13 @@ import {
   setFfmpegParameters,
 } from "@/lib/settings";
 import { parseFfmpegParameters } from "@/lib/ffmpeg-parameters";
+import { requireAdmin } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const unauthorized = await requireAdmin(request);
+    if (unauthorized) return unauthorized;
+
     const [tags, visibilityEnabled] = await Promise.all([
       getDefaultTags(),
       getDefaultVisibilityEnabled(),
@@ -25,6 +29,9 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
+    const unauthorized = await requireAdmin(request);
+    if (unauthorized) return unauthorized;
+
     const body = await request.json();
     const tags = Array.isArray(body?.tags) ? body.tags : [];
     const visibilityEnabled = Boolean(body?.visibilityEnabled);

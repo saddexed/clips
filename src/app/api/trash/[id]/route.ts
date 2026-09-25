@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { permanentlyDeleteArtifact, type TrashArtifactKind } from "@/lib/trash";
 import { revalidatePath, revalidateTag } from "next/cache";
+import { requireAdmin } from "@/lib/auth";
 
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const unauthorized = await requireAdmin(request);
+    if (unauthorized) return unauthorized;
+
     const { id } = await params;
     const kind = new URL(request.url).searchParams.get("kind");
     if (kind !== "original" && kind !== "converted") {

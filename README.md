@@ -23,6 +23,20 @@ ADMIN_PASSWORD=your_admin_password
 AUTH_SECRET=replace_with_a_long_random_secret
 ```
 
+`ADMIN_PASSWORD` and `AUTH_SECRET` are required for the administrative API.
+`AUTH_SECRET` must contain at least 32 characters.
+
+To explicitly install a generated secret into `.env`, run:
+
+```bash
+bun run auth:secret
+```
+
+The command does not overwrite an existing value unless `--force` is supplied.
+
+Hidden clips are unlisted: they are excluded from the homepage and public
+search, but anyone who has the clip's direct ID can watch or download it.
+
 ## Run
 
 Start the web application:

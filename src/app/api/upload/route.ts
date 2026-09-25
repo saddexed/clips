@@ -13,34 +13,28 @@ import { normalizeMediaMetadata } from "@/lib/media";
 import { getDataPath, toStoredPath, vaultArtifactPath } from "@/lib/paths";
 import { hashBytes } from "@/lib/hash";
 import { revalidatePath, revalidateTag } from "next/cache";
-import { cookies } from "next/headers";
-import { jwtVerify } from "jose";
+import { requireAdmin } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
-    // 1. Manually enforce JWT authentication
-    // We do this inside the route handler instead of Edge Middleware to evade the 10MB edge proxy limits.
-    if (process.env.ADMIN_PASSWORD) {
-      const cookieStore = await cookies();
-      const token = cookieStore.get("admin_session")?.value;
-      if (!token) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
-      try {
-        const secret = new TextEncoder().encode(
-          process.env.AUTH_SECRET || "fallback_secret_for_dev_only",
-        );
-        await jwtVerify(token, secret);
-      } catch (err) {
-        return NextResponse.json({ error: "Invalid session" }, { status: 401 });
-      }
+    const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
+    const contentLength = Number(request.headers.get("content-length") || 0);
+    if (contentLength > MAX_UPLOAD_BYTES + 1024 * 1024) {
+      return NextResponse.json({ error: "Upload exceeds the 500 MB limit" }, { status: 413 });
     }
+
+    const unauthorized = await requireAdmin(request);
+    if (unauthorized) return unauthorized;
 
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    }
+
+    if (file.size <= 0 || file.size > MAX_UPLOAD_BYTES) {
+      return NextResponse.json({ error: "File size must be between 1 byte and 500 MB" }, { status: 413 });
     }
 
     const isVideo = file.type.startsWith("video/");

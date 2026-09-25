@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jobHistoryForVideo, listJobHistoryPage } from "@/lib/database";
+import { requireAdmin } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
+  const unauthorized = await requireAdmin(request);
+  if (unauthorized) return unauthorized;
+
   const videoId = request.nextUrl.searchParams.get("videoId");
   if (videoId) return NextResponse.json({ items: jobHistoryForVideo(videoId) });
   return NextResponse.json(listJobHistoryPage(

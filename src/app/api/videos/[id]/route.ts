@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createJobHistory, getVideo, updateVideo } from "@/lib/database";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { softDeleteVideo } from "@/lib/trash";
+import { requireAdmin } from "@/lib/auth";
 
 function normalizeTag(input: string): string {
   return input
@@ -17,6 +18,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const unauthorized = await requireAdmin(request);
+    if (unauthorized) return unauthorized;
+
     const { id } = await params;
     const body = await request.json();
     const { title, description, tags, isHidden, date } = body;
@@ -90,6 +94,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const unauthorized = await requireAdmin(request);
+    if (unauthorized) return unauthorized;
+
     const { id } = await params;
 
     const video = getVideo(id);

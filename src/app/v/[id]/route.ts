@@ -37,11 +37,19 @@ export async function GET(
     const range = req.headers.get("range");
 
     if (range) {
-      const parts = range.replace(/bytes=/, "").split("-");
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : size - 1;
+      const match = /^bytes=(\d+)-(\d*)$/.exec(range.trim());
+      if (!match) {
+        return new NextResponse(null, {
+          status: 416,
+          headers: { "Content-Range": `bytes */${size}` },
+        });
+      }
 
-      if (start >= size) {
+      const start = Number(match[1]);
+      const requestedEnd = match[2] ? Number(match[2]) : size - 1;
+      const end = Math.min(requestedEnd, size - 1);
+
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(requestedEnd) || start >= size || end < start) {
         return new NextResponse(null, {
           status: 416,
           headers: {

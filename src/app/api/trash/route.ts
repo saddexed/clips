@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { clearTrash, listTrashItems } from "@/lib/trash";
 import { revalidatePath, revalidateTag } from "next/cache";
+import { requireAdmin } from "@/lib/auth";
 
 export async function GET(request: Request) {
   try {
+    const unauthorized = await requireAdmin(request);
+    if (unauthorized) return unauthorized;
+
     const url = new URL(request.url);
     const page = Number(url.searchParams.get("page") || 1);
     const limit = Number(url.searchParams.get("limit") || 50);
@@ -16,8 +20,11 @@ export async function GET(request: Request) {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: Request) {
   try {
+    const unauthorized = await requireAdmin(request);
+    if (unauthorized) return unauthorized;
+
     await clearTrash();
     revalidatePath("/admin");
     revalidatePath("/admin/history");

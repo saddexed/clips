@@ -3,12 +3,16 @@ import { getVideo } from "@/lib/database";
 import { deleteQueueJob } from "@/lib/queue";
 import { revalidatePath } from "next/cache";
 import { softDeleteVideo } from "@/lib/trash";
+import { requireAdmin } from "@/lib/auth";
 
 export async function DELETE(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
 ) {
     try {
+        const unauthorized = await requireAdmin(request);
+        if (unauthorized) return unauthorized;
+
         const { id: jobId } = await params;
         if (!/^\d+$/.test(jobId) || !Number.isSafeInteger(Number(jobId))) {
             return NextResponse.json({ error: "Invalid job ID" }, { status: 400 });
@@ -53,7 +57,7 @@ export async function DELETE(
     } catch (error: any) {
         console.error("Queue Job Delete Error:", error);
         return NextResponse.json(
-            { error: "Failed to delete job", details: error.message },
+            { error: "Failed to delete job" },
             { status: 500 },
         );
     }

@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { getQueueStats, setQueuePaused } from "../../../lib/queue";
+import { requireAdmin } from "@/lib/auth";
 
 export async function GET(request: Request) {
   try {
+    const unauthorized = await requireAdmin(request);
+    if (unauthorized) return unauthorized;
+
     const url = new URL(request.url);
     return NextResponse.json(getQueueStats({
       page: Number(url.searchParams.get("page") || 1),
@@ -19,6 +23,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const unauthorized = await requireAdmin(request);
+    if (unauthorized) return unauthorized;
+
     const body = await request.json().catch(() => ({}));
     const action = body?.action;
 

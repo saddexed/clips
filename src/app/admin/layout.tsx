@@ -36,9 +36,11 @@ export default function AdminLayout({
               <Link href="/" title="Home" aria-label="Home" className={btn('ghost', 'icon-sm')}>
                 <Home size={16} />
               </Link>
-              <a href="/api/auth/logout" title="Log out" aria-label="Log out" className={btn('ghost', 'icon-sm')}>
+              <form action="/api/auth/logout" method="post">
+                <button type="submit" title="Log out" aria-label="Log out" className={btn('ghost', 'icon-sm')}>
                 <LogOut size={16} />
-              </a>
+                </button>
+              </form>
               <ThemeToggle />
             </div>
           </div>

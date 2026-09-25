@@ -9,6 +9,7 @@
     "start": "bun --bun next start",
     "lint": "next lint",
     "test": "bun test",
+    "auth:secret": "bun src/scripts/generate-auth-secret.ts",
     "worker:start": "bun src/worker/index.ts",
     "start:all": "bun src/runner.ts"
   },
