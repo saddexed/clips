@@ -35,8 +35,13 @@ original while copying. That is what makes upload dedupe work afterwards.
 sudo docker exec clips-postgres pg_dump -U clips -d clips_db -Fc > ~/clips-pg-backup.dump
 ```
 
-Media is only ever copied, so the files need no backup — but check free space.
-Peak usage roughly doubles until you delete the old layout.
+Media is only ever copied, so the files need no backup — but check free space on
+the volume that holds them. Peak usage roughly doubles until you delete the old
+layout in step 6.
+
+```bash
+df -h /mnt/video_storage; du -sh /mnt/video_storage
+```
 
 ## 2. Export
 
@@ -84,15 +89,26 @@ Check out this commit or later, `bun install`, and make sure `data/clips.db` doe
 
 `DATA_PATH` must point at whatever the old `clips-app` container mounted to
 `/app/data`. Without it the importer resolves media against `./data` and every
-original looks missing. Export both variables once so no later command can lose
-them:
+original looks missing. There is no need to move the media — leave it on its own
+volume and point the app at it.
 
 ```bash
 sudo docker inspect clips-app --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}'
+```
 
-export DATA_PATH=/mnt/video_storage
-export DB=./data/clips.db
+Put both values in `.env` rather than prefixing commands. Bun loads `.env`
+automatically, so the importer, the app, and the worker all agree and no copied
+command line can lose them:
 
+```dotenv
+DATA_PATH=/mnt/video_storage
+DB=/mnt/video_storage/clips.db
+```
+
+Keeping the database on the same persistent volume as the media means a re-clone
+of the repository can't strand it.
+
+```bash
 bun run import:postgresql ~/clips/pg-export.json
 ```
 
@@ -158,12 +174,12 @@ bun run start
 bun run worker:start
 ```
 
-Update `.env` while you're there. `DATABASE_URL`, `REDIS_URL`, and
-`VIDEO_STORAGE_PATH` are all gone:
+Your `.env` should now read, with `DATABASE_URL`, `REDIS_URL`, and
+`VIDEO_STORAGE_PATH` all gone:
 
 ```dotenv
-DB=./data/clips.db
 DATA_PATH=/mnt/video_storage
+DB=/mnt/video_storage/clips.db
 ADMIN_PASSWORD=...
 AUTH_SECRET=...
 ```
