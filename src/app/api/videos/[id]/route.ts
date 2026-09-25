@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { repository } from "@/lib/repository";
+import { createJobHistory, getVideo, updateVideo } from "@/lib/database";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { softDeleteVideo } from "@/lib/trash";
 
@@ -21,10 +21,7 @@ export async function PATCH(
     const body = await request.json();
     const { title, description, tags, isHidden, date } = body;
 
-    const existingVideo = await repository.video.findUnique({
-      where: { id },
-      select: { id: true },
-    });
+    const existingVideo = getVideo(id);
 
     if (!existingVideo) {
       return NextResponse.json({ error: "Video not found" }, { status: 404 });
@@ -38,9 +35,9 @@ export async function PATCH(
     if (isHidden !== undefined) updateData.isHidden = isHidden;
     if (date !== undefined) updateData.date = new Date(date);
 
-    // Handle Tags (Many-to-Many relation)
+    // Handle Tags
     if (Array.isArray(tags)) {
-      const normalizedTags = Array.from(
+      updateData.tags = Array.from(
         new Set(
           tags
             .filter((t): t is string => typeof t === "string")
@@ -48,35 +45,21 @@ export async function PATCH(
             .filter(Boolean),
         ),
       );
-
-      updateData.tags = {
-        // Disconnect all existing tags first, then connect the new ones
-        set: [],
-        connectOrCreate: normalizedTags.map((t) => ({
-          where: { name: t },
-          create: { name: t },
-        })),
-      };
     }
 
-    const video = await repository.video.update({
-      where: { id },
-      data: updateData,
-      include: {
-        tags: true,
-      },
-    });
+    const video = updateVideo(id, updateData);
 
     const isHideAction =
       isHidden !== undefined && Object.keys(updateData).length === 1;
-    await repository.jobHistory.create({
-      data: {
-        videoId: id,
-        jobType: isHideAction ? "HIDE" : "EDIT",
-        status: "COMPLETED",
-        completedAt: new Date(),
-        ...(isHideAction ? { metadata: { isHidden } } : {}),
-      },
+    createJobHistory({
+      videoId: id,
+      jobType: isHideAction ? "HIDE" : "EDIT",
+      status: "COMPLETED",
+      completedAt: new Date(),
+      originalSize: 0,
+      processedSize: 0,
+      errorMessage: null,
+      metadata: isHideAction ? { isHidden } : null,
     });
 
     const payload = JSON.stringify({ success: true, video }, (key, value) =>
@@ -84,6 +67,8 @@ export async function PATCH(
     );
 
     revalidatePath("/admin");
+    revalidatePath("/admin/history");
+    revalidatePath("/admin/settings");
     revalidatePath("/");
     revalidateTag("videos", { expire: 0 });
 
@@ -107,9 +92,7 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    const video = await repository.video.findUnique({
-      where: { id },
-    });
+    const video = getVideo(id);
 
     if (!video) {
       return NextResponse.json({ error: "Video not found" }, { status: 404 });

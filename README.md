@@ -13,11 +13,12 @@ A Bun-hosted media library built with Next.js. Application records, settings, an
 bun install
 ```
 
-The database is created automatically at `file:./data/clips.db` on the first application or worker start. Configure a different location with `DATABASE_URL` using a `file:` URL.
+The database is created automatically at `./data/clips.db` on the first application or worker start. Configure a different location with `DB`.
 
 ```dotenv
-DATABASE_URL=file:./data/clips.db
+DB=./data/clips.db
 DATA_PATH=./data
+PORT=3000
 ADMIN_PASSWORD=your_admin_password
 AUTH_SECRET=replace_with_a_long_random_secret
 ```
@@ -40,12 +41,28 @@ For production:
 
 ```bash
 bun run build
+
+# Start both web server and worker in one terminal (useful for screen/tmux):
+bun run start:all
+
+# Or run them in separate terminals/services:
 bun run start
 bun run worker:start
 ```
 
 The worker claims one durable SQLite job at a time. Jobs interrupted by a process crash are recovered after their lease expires; failed jobs are retried up to three times. Keep a single app/worker deployment against each database file.
 
-## Migration Note
+## Migration History & Architecture Note
 
-This migration creates a new SQLite database. Export existing PostgreSQL records before retiring the old deployment if its library or history must be retained; PostgreSQL data cannot be read directly from `clips.db`.
+The project was originally architected around Node.js, PostgreSQL (with Prisma ORM), Redis (with BullMQ), and Docker Compose. It has since been migrated to a lightweight, zero-external-service setup running natively on **Bun** and **SQLite**:
+
+- **Docker & PostgreSQL Removal** ([`0925d7b`](https://github.com/saddexed/clips/commit/0925d7bade4bd6c4f2c25aec6d0108705760d03f) — *feat: switch to Bun and SQLite from Node and PostgreSQL; drop Dockerized setup*):
+  - Removed Docker (`Dockerfile`, `docker-compose.yml`) and containerized dependencies.
+  - Replaced PostgreSQL and Prisma with native `bun:sqlite`.
+  - Replaced Redis and BullMQ with an in-process, durable SQLite worker queue.
+- **Workflow Cleanup** ([`a376cc6`](https://github.com/saddexed/clips/commit/a376cc6ca3bc768416c8248c0574a7bb8a429350) — *refactor: simplify video storage schema*):
+  - Removed Docker CI/CD publish workflows (`.github/workflows/docker-publish.yml`).
+  - Streamlined the database schema and storage layout.
+- **Post-Migration Cleanup**:
+  - Removed transition scripts (`migrate-sqlite3.ts`, `delete-postgresql.ts`), legacy database backup artifacts, and compatibility shim layers after migration completion.
+

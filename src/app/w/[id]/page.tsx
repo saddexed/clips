@@ -1,4 +1,4 @@
-import { repository } from "@/lib/repository";
+import { getVideo } from "@/lib/database";
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
@@ -14,7 +14,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const video = await repository.video.findUnique({ where: { id } });
+  const video = getVideo(id);
 
   if (!video || video.deletedAt || !video.activePath) {
     return { title: "Not Found" };
@@ -63,10 +63,7 @@ export default async function WatchPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const video = await repository.video.findUnique({
-    where: { id },
-    include: { tags: true },
-  });
+  const video = getVideo(id);
 
   if (!video || video.deletedAt || !video.activePath) {
     notFound();

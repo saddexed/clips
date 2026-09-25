@@ -1,4 +1,4 @@
-import { repository } from "../lib/repository";
+import { listVideos } from "@/lib/database";
 import { HomeClient } from "./HomeClient";
 import VideoGallery from "@/components/VideoGallery";
 
@@ -10,15 +10,11 @@ export const metadata = {
 
 const getVideos = unstable_cache(
   async () => {
-    const videos = await repository.video.findMany({
-      where: {
-        deletedAt: null,
-        isHidden: false,
-      },
-      orderBy: { date: "desc" },
-      include: { tags: true },
+    return listVideos({
+      publicOnly: true,
+      sortField: "date",
+      sortOrder: "desc",
     });
-    return videos;
   },
   ["videos"],
   { revalidate: 60, tags: ["videos"] },

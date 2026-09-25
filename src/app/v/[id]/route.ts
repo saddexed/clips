@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { repository } from "@/lib/repository";
+import { getVideo } from "@/lib/database";
 import fs from "node:fs";
 import { stat } from "node:fs/promises";
 import { Readable } from "node:stream";
@@ -16,9 +16,7 @@ export async function GET(
   const { id } = await params;
 
   try {
-    const video = await repository.video.findUnique({
-      where: { id },
-    });
+    const video = getVideo(id);
 
     if (!video || !video.activePath || video.deletedAt) {
       return new NextResponse("Video not found or unavailable", {

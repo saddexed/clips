@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { repository } from "@/lib/repository";
+import { getVideo } from "@/lib/database";
 import { deleteQueueJob } from "@/lib/queue";
 import { revalidatePath } from "next/cache";
 import { softDeleteVideo } from "@/lib/trash";
@@ -27,9 +27,7 @@ export async function DELETE(
         const videoId = job.data.videoId;
         if (videoId) {
             // Find the corresponding video metadata
-            const video = await repository.video.findUnique({
-                where: { id: videoId },
-            });
+            const video = getVideo(videoId);
 
             if (video && video.status !== "COMPLETED") {
                 console.log(

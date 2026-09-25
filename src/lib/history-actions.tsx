@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Upload, PlayCircle, Eye, EyeOff, Pencil, Trash2, ShieldQuestion, AlertTriangle, RotateCcw } from 'lucide-react';
 import type { Tone } from '@/components/ui';
+import { formatBytes } from '@/lib/utils';
 
 // Shared presentation for job-history events (global History page and per-clip History tab).
 
@@ -57,12 +58,4 @@ export function HistorySizeDetail({ job }: { job: HistoryEvent }) {
   return null;
 }
 
-export function formatBytes(bytes: number | bigint | null) {
-  if (bytes === null) return '-';
-  const val = Number(bytes);
-  if (val === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(val) / Math.log(k));
-  return parseFloat((val / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
+export { formatBytes } from '@/lib/utils';

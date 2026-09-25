@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Activity, Clock, AlertTriangle, CheckCircle, Trash2, Loader2, PauseCircle, PlayCircle } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, formatBytes } from '@/lib/utils';
 import { PageHeader, Pager, StatusPill, btn, panelClass, tableClass, type Tone } from '@/components/ui';
 
 type QueueData = {
@@ -229,12 +229,6 @@ function JobProgress({ job }: { job: QueueData['recentJobs'][number] }) {
   return <StatusPill tone="info" icon={<Clock size={12} />}>Waiting</StatusPill>;
 }
 
-function formatBytes(bytes: number) {
-  if (!bytes) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  const index = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
-  return `${Number((bytes / 1024 ** index).toFixed(2))} ${units[index]}`;
-}
 
 function CountChip({ count, label, tone, icon }: { count: number; label: string; tone: Tone; icon: React.ReactNode }) {
   // Zero counts stay neutral so only states with jobs draw attention

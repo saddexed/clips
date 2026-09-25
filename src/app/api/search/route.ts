@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { repository } from "@/lib/repository";
+import { search } from "@/lib/database";
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,59 +13,9 @@ export async function GET(request: NextRequest) {
     }
 
     const isAdmin = context === "admin";
+    const result = search(q, isAdmin, "date", "desc");
 
-    const tags = await repository.tag.findMany({
-      where: {
-        name: {
-          contains: q,
-          mode: "insensitive",
-        },
-      },
-      orderBy: { name: "asc" },
-      take: 12,
-      select: {
-        name: true,
-      },
-    });
-
-    const videos = await repository.video.findMany({
-      where: {
-        deletedAt: null,
-        ...(isAdmin ? {} : { isHidden: false }),
-        OR: [
-          {
-            title: {
-              contains: q,
-              mode: "insensitive",
-            },
-          },
-          {
-            tags: {
-              some: {
-                name: {
-                  contains: q,
-                  mode: "insensitive",
-                },
-              },
-            },
-          },
-        ],
-      },
-      orderBy: {
-        date: "desc",
-      },
-      take: 20,
-      select: {
-        id: true,
-        title: true,
-        filename: true,
-      },
-    });
-
-    return NextResponse.json({
-      tags,
-      videos,
-    });
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Search API Error:", error);
     return NextResponse.json({ error: "Failed to search" }, { status: 500 });

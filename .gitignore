@@ -26,14 +26,8 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
-# Prisma
-prisma/*.db
-prisma/*.db-journal
-
-temp.txt
 .agents/
 data/
 misc/
-.screenshots/
 
 *.md

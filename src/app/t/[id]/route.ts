@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { repository } from "@/lib/repository";
+import { getVideo } from "@/lib/database";
 import { extractThumbnail } from "@/lib/ffmpeg";
 import fs from "node:fs";
 import { stat, mkdir } from "node:fs/promises";
@@ -14,9 +14,7 @@ export async function GET(
   const { id } = await params;
 
   try {
-    const video = await repository.video.findUnique({
-      where: { id },
-    });
+    const video = getVideo(id);
 
     if (!video) {
       return new NextResponse(null, { status: 404 });

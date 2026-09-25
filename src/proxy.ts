@@ -10,7 +10,7 @@ export async function proxy(req: NextRequest) {
   }
 
   const token = req.cookies.get('admin_session')?.value;
-  const host = req.headers.get('host') || 'localhost:6119';
+  const host = req.headers.get('host') || `localhost:${process.env.PORT || '3000'}`;
   const protocol = req.headers.get('x-forwarded-proto') || 'http';
   const loginUrl = new URL('/login', `${protocol}://${host}`);
 

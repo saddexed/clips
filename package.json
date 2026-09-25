@@ -10,13 +10,10 @@
     "lint": "next lint",
     "test": "bun test",
     "worker:start": "bun src/worker/index.ts",
-    "migrate:sqlite3": "bun scripts/migrate-sqlite3.ts",
-    "delete:postgresql": "bun scripts/delete-postgresql.ts"
+    "start:all": "bun src/runner.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",
-    "date-fns": "^4.1.0",
-    "dotenv": "^17.3.1",
     "jose": "^6.2.1",
     "lucide-react": "^0.577.0",
     "next": "^16.1.6",
@@ -33,7 +30,6 @@
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "tailwindcss": "^4.3.3",
-    "tsup": "^8.5.1",
     "typescript": "^5.7.3"
   }
 }

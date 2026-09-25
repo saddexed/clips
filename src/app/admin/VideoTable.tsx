@@ -7,7 +7,7 @@ import SafeVideoPlayer from '@/components/SafeVideoPlayer';
 import SearchBar, { type SearchItem } from '@/components/SearchBar';
 import { mediaTypeLabel } from '@/lib/media';
 import { HistorySizeDetail, getActionDetails } from '@/lib/history-actions';
-import { cn } from '@/lib/utils';
+import { cn, formatBytes } from '@/lib/utils';
 import type { VideoSortField, VideoSortOrder } from '@/lib/database';
 import { Modal, Pager, Segmented, StatusPill, btn, inputClass, labelClass, panelClass, tableClass, type Tone } from '@/components/ui';
 
@@ -682,15 +682,7 @@ function formatDuration(seconds: number) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function formatBytes(bytes: number | bigint | null) {
-  if (bytes === null) return '-';
-  const val = Number(bytes);
-  if (val === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(val) / Math.log(k));
-  return parseFloat((val / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
+
 
 function getCompressionInfo(originalSize: number | bigint, processedSize: number | bigint | null) {
   const orig = Number(originalSize);
