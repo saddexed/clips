@@ -1,10 +1,12 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode, useMemo } from 'react';
+import type Resumable from 'resumablejs';
 import { UploadCloud, X, CheckCircle2, AlertCircle, Plus, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { btn } from '@/components/ui';
+import { CHUNK_SIZE, MAX_UPLOAD_BYTES } from '@/lib/upload-limits';
 
 type UploadStatus = 'pending' | 'uploading' | 'success' | 'error';
 
@@ -28,6 +30,43 @@ interface GlobalUploadContextType {
 
 const GlobalUploadContext = createContext<GlobalUploadContextType | undefined>(undefined);
 
+type ChunkHandler = {
+  resolve: (videoId: string) => void;
+  reject: (error: Error) => void;
+  onProgress: (progress: number) => void;
+};
+
+// Identify an in-progress file across reloads without hashing an entire video.
+async function uploadIdentifier(file: File) {
+  const sampleSize = 64 * 1024;
+  const [first, last] = await Promise.all([
+    file.slice(0, sampleSize).arrayBuffer(),
+    file.slice(Math.max(0, file.size - sampleSize)).arrayBuffer(),
+  ]);
+  const metadata = new TextEncoder().encode(`${file.name}\0${file.size}\0${file.lastModified}\0${file.type}\0`);
+  const bytes = new Uint8Array(metadata.length + first.byteLength + last.byteLength);
+  bytes.set(metadata);
+  bytes.set(new Uint8Array(first), metadata.length);
+  bytes.set(new Uint8Array(last), metadata.length + first.byteLength);
+  const fingerprint = Array.from(
+    new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)),
+    b => b.toString(16).padStart(2, '0'),
+  ).join('');
+  const storageKey = `clips:upload:${CHUNK_SIZE}:${fingerprint}`;
+  let sessionId: string;
+  try {
+    sessionId = localStorage.getItem(storageKey) || crypto.randomUUID();
+    localStorage.setItem(storageKey, sessionId);
+  } catch {
+    sessionId = crypto.randomUUID();
+  }
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${fingerprint}:${sessionId}`));
+  return {
+    identifier: Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join(''),
+    storageKey,
+  };
+}
+
 export function GlobalUploadProvider({ children }: { children: ReactNode }) {
   const MAX_CONCURRENT_UPLOADS = 3;
   const UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
@@ -36,7 +75,98 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
   const [isDragging, setIsDragging] = useState(false);
   const [isOverlayOpen, setOverlayOpen] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  const chunkHandlers = useRef(new Map<File, ChunkHandler>());
+  const uploadSessionKeys = useRef(new Map<File, string>());
+  const resumableRef = useRef<Promise<Resumable> | null>(null);
   const router = useRouter();
+
+  const getResumable = useCallback(() => {
+    if (!resumableRef.current) {
+      resumableRef.current = import('resumablejs').then(({ default: ResumableClient }) => {
+        const client = new ResumableClient({
+          target: '/api/upload/chunk',
+          method: 'octet',
+          chunkSize: CHUNK_SIZE,
+          forceChunkSize: true,
+          simultaneousUploads: 3,
+          testChunks: true,
+          generateUniqueIdentifier: async (file: File) => {
+            try {
+              const { identifier, storageKey } = await uploadIdentifier(file);
+              uploadSessionKeys.current.set(file, storageKey);
+              return identifier;
+            } catch (error) {
+              // ResumableJS silently skips files whose identifier promise rejects.
+              chunkHandlers.current.get(file)?.reject(error instanceof Error ? error : new Error('Cannot identify upload'));
+              chunkHandlers.current.delete(file);
+              throw error;
+            }
+          },
+          query: (file: { file: File }) => ({ lastModified: file.file.lastModified }),
+          maxChunkRetries: 3,
+          chunkRetryInterval: 1500,
+          xhrTimeout: UPLOAD_TIMEOUT_MS,
+          permanentErrors: [400, 401, 403, 404, 409, 413, 415, 500, 501],
+        } as unknown as ConstructorParameters<typeof ResumableClient>[0]);
+
+        client.on('fileAdded', (file) => {
+          client.upload();
+        });
+        client.on('fileProgress', (file) => {
+          chunkHandlers.current.get(file.file)?.onProgress(Math.min(99, Math.floor(file.progress(false) * 99)));
+        });
+        client.on('fileError', (file, message) => {
+          const handler = chunkHandlers.current.get(file.file);
+          let reason = 'Chunk upload failed';
+          try {
+            reason = JSON.parse(message)?.error || reason;
+          } catch {
+            reason = message?.trimStart().startsWith('<')
+              ? 'Upload failed. Please try again.'
+              : message?.slice(0, 240) || reason;
+          }
+          handler?.reject(new Error(reason));
+          chunkHandlers.current.delete(file.file);
+          uploadSessionKeys.current.delete(file.file);
+          client.removeFile(file);
+        });
+        client.on('filesAdded', (_added: unknown, skipped: File[]) => {
+          for (const file of skipped) {
+            chunkHandlers.current.get(file)?.reject(new Error('This file is already uploading.'));
+            chunkHandlers.current.delete(file);
+            uploadSessionKeys.current.delete(file);
+          }
+        });
+        client.on('fileSuccess', async (file) => {
+          const handler = chunkHandlers.current.get(file.file);
+          handler?.onProgress(99);
+          try {
+            const response = await fetch('/api/upload/chunk/complete', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ identifier: file.uniqueIdentifier }),
+            });
+            const data = await response.json().catch(() => null);
+            if (!response.ok) throw new Error(data?.error || `Failed to finalize upload (HTTP ${response.status})`);
+            if (!data?.videoId) throw new Error('Finalization response is missing a video ID');
+            const storageKey = uploadSessionKeys.current.get(file.file);
+            if (storageKey) {
+              try { localStorage.removeItem(storageKey); } catch { /* Storage may be unavailable. */ }
+            }
+            handler?.resolve(data.videoId);
+          } catch (error) {
+            handler?.reject(error instanceof Error ? error : new Error('Failed to finalize upload'));
+          } finally {
+            chunkHandlers.current.delete(file.file);
+            uploadSessionKeys.current.delete(file.file);
+            client.removeFile(file);
+          }
+        });
+        return client;
+      });
+    }
+    return resumableRef.current;
+  }, []);
 
   // 1. Process files and add to state
   const addFiles = useCallback((files: FileList | File[]) => {
@@ -123,34 +253,46 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
 
   const doUpload = useCallback(async (upload: UploadItem) => {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort('Upload timeout'), UPLOAD_TIMEOUT_MS);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
 
     try {
-      const formData = new FormData();
-      formData.append('file', upload.file);
-      formData.append('lastModified', upload.file.lastModified.toString());
-
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        let message = 'Upload failed';
-        try {
-          const data = await res.json();
-          message = data?.error || message;
-        } catch {
-          // no-op, keep fallback message
+      if (upload.file.size > MAX_UPLOAD_BYTES) {
+        throw new Error('Upload exceeds the 500 MB limit');
+      }
+      let videoId: string;
+      if (upload.file.size > CHUNK_SIZE) {
+        if (!globalThis.crypto?.subtle) {
+          throw new Error('Chunked uploads require HTTPS or localhost (browser crypto is unavailable)');
         }
-        throw new Error(message);
+        const client = await getResumable();
+        if (!client.support) throw new Error('This browser does not support resumable uploads');
+        videoId = await new Promise<string>((resolve, reject) => {
+          chunkHandlers.current.set(upload.file, {
+            resolve, reject,
+            onProgress: progress => setUploads(prev => prev.map(p =>
+              p.id === upload.id ? { ...p, progress } : p
+            )),
+          });
+          client.addFile(upload.file);
+        });
+      } else {
+        timeout = setTimeout(() => controller.abort('Upload timeout'), UPLOAD_TIMEOUT_MS);
+        const formData = new FormData();
+        formData.append('file', upload.file);
+        formData.append('lastModified', upload.file.lastModified.toString());
+        const res = await fetch('/api/upload', {
+          method: 'POST', body: formData, signal: controller.signal,
+        });
+        if (!res.ok) {
+          let message = 'Upload failed';
+          try { message = (await res.json())?.error || message; } catch { /* Keep fallback. */ }
+          throw new Error(message);
+        }
+        videoId = (await res.json()).videoId;
       }
 
-      const data = await res.json();
-
       setUploads(prev => prev.map(p =>
-        p.id === upload.id ? { ...p, status: 'success', progress: 100, videoId: data.videoId } : p
+        p.id === upload.id ? { ...p, status: 'success', progress: 100, videoId } : p
       ));
     } catch (err: any) {
       const isAbort = err?.name === 'AbortError' || err?.message === 'Upload timeout';
@@ -160,9 +302,9 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
           : p
       ));
     } finally {
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
     }
-  }, []);
+  }, [getResumable]);
 
   // 3. Controlled queue runner (prevents stalled pending files)
   useEffect(() => {
