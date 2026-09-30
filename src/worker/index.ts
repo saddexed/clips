@@ -6,7 +6,8 @@ import {
   claimNextJob,
   completeQueueJob,
   failQueueJob,
-  isQueuePaused,
+  isJobPaused,
+  releasePausedJob,
   updateQueueProgress,
   type QueueJob,
 } from "../lib/queue.js";
@@ -54,17 +55,21 @@ function hasMediaTool(command: "ffmpeg" | "ffprobe"): boolean {
   return spawnSync(command, ["-version"], { stdio: "ignore" }).status === 0;
 }
 
-async function waitUntilQueueResumed() {
-  while (isQueuePaused()) {
-    await sleep(1000);
+class JobPausedError extends Error {
+  constructor(id: number) {
+    super(`Job ${id} was paused`);
   }
+}
+
+function assertJobRunnable(job: QueueJob) {
+  if (isJobPaused(job.id)) throw new JobPausedError(job.id);
 }
 
 async function processVideo(job: QueueJob) {
   const { videoId } = job.data;
   console.log(`[Worker] Started processing video ${videoId}`);
 
-  await waitUntilQueueResumed();
+  assertJobRunnable(job);
   const videoRecord = getVideo(videoId);
 
   if (!videoRecord) {
@@ -91,6 +96,7 @@ async function processVideo(job: QueueJob) {
       // --- IMAGE PROCESSING PIPELINE ---
       console.log(`[Worker] Extracting metadata for image ${videoId}`);
       const metadata = await sharp(filePath).metadata();
+      assertJobRunnable(job);
       const originalStats = await stat(filePath);
       const oldestDate = getOldestDate([
         videoRecord.createdAt,
@@ -132,6 +138,7 @@ async function processVideo(job: QueueJob) {
       const outputFilename = `${videoId}.webp`;
       const outputPath = path.join(processedDir, outputFilename);
       await sharp(filePath).webp({ lossless: true }).toFile(outputPath);
+      assertJobRunnable(job);
 
       const webpStats = await stat(outputPath);
       const vaultDir = path.join(DATA_PATH, "vault");
@@ -141,6 +148,7 @@ async function processVideo(job: QueueJob) {
       let finalPath: string;
       let finalSize: number;
 
+      assertJobRunnable(job);
       assertVideoAvailable(videoId);
       if (webpStats.size >= originalStats.size) {
         console.log(
@@ -182,6 +190,7 @@ async function processVideo(job: QueueJob) {
       // --- VIDEO PROCESSING PIPELINE ---
       console.log(`[Worker] Extracting metadata for video ${videoId}`);
       const metadata = await extractMetadata(filePath);
+      assertJobRunnable(job);
       const originalStats = await stat(filePath);
 
       const oldestDate = getOldestDate([
@@ -224,8 +233,10 @@ async function processVideo(job: QueueJob) {
         originalMetadata,
         activeSize: originalStats.size,
       });
+      assertJobRunnable(job);
 
       if (isAdoptableWebm(metadata.raw)) {
+        assertJobRunnable(job);
         assertVideoAvailable(videoId);
         const finalPath = vaultArtifactPath(videoId, filename, "original", "VIDEO");
         await mkdir(path.dirname(finalPath), { recursive: true });
@@ -278,19 +289,19 @@ async function processVideo(job: QueueJob) {
       let transcoded = false;
 
       while (!transcoded) {
-        await waitUntilQueueResumed();
+        assertJobRunnable(job);
 
         let pauseCheckTimer: NodeJS.Timeout | null = null;
         let pauseTriggered = false;
 
         try {
           pauseCheckTimer = setInterval(() => {
-            if (isQueuePaused()) {
+            if (isJobPaused(job.id)) {
               pauseTriggered = true;
               const killed = killActiveFfmpegProcess();
               if (killed) {
                 console.log(
-                  `[Worker] Queue paused - interrupted ffmpeg for ${videoId}`,
+                  `[Worker] Paused job ${job.id} - interrupted ffmpeg for ${videoId}`,
                 );
               }
             }
@@ -305,18 +316,12 @@ async function processVideo(job: QueueJob) {
             },
             metadata.audioBitrate,
           );
+          assertJobRunnable(job);
 
           transcoded = true;
         } catch (error) {
-          const currentlyPaused = isQueuePaused();
-          if (pauseTriggered || currentlyPaused) {
-            updateQueueProgress(job.id, 0);
-            console.log(
-              `[Worker] Queue is paused; restarting transcode from beginning once resumed for ${videoId}`,
-            );
-            await waitUntilQueueResumed();
-            continue;
-          }
+          if (pauseTriggered || error instanceof JobPausedError || isJobPaused(job.id))
+            throw new JobPausedError(job.id);
           throw error;
         } finally {
           if (pauseCheckTimer) {
@@ -337,6 +342,7 @@ async function processVideo(job: QueueJob) {
       let finalSize: number;
       let processedSize = 0;
 
+      assertJobRunnable(job);
       assertVideoAvailable(videoId);
       if (transcodedStats.size >= originalStats.size) {
         finalSize = originalStats.size;
@@ -384,14 +390,19 @@ async function processVideo(job: QueueJob) {
       console.log(`[Worker] Finished processing video ${videoId}`);
     }
   } catch (error) {
-    console.error(`[Worker] Error processing video ${videoId}:`, error);
-
     // A cancelled job may finish ffmpeg after its source was moved to Trash.
     // Never leave an unpublished conversion behind for a later run to adopt.
     await unlink(path.join(DATA_PATH, "processed", `${videoId}.webm`)).catch(() => {});
     await unlink(path.join(DATA_PATH, "processed", `${videoId}.webp`)).catch(() => {});
 
-    if (!getVideo(videoId)?.deletedAt) updateVideo(videoId, { status: "FAILED" });
+    const currentVideo = getVideo(videoId);
+    if (error instanceof JobPausedError) {
+      if (currentVideo && !currentVideo.deletedAt) updateVideo(videoId, { status: "QUEUED" });
+      throw error;
+    }
+
+    console.error(`[Worker] Error processing video ${videoId}:`, error);
+    if (currentVideo && !currentVideo.deletedAt) updateVideo(videoId, { status: "FAILED" });
 
     createJobHistory({
       videoId,
@@ -443,6 +454,11 @@ async function runWorker() {
       completeQueueJob(job.id);
       console.log(`[Worker] Job ${job.id} completed successfully`);
     } catch (error) {
+      if (error instanceof JobPausedError) {
+        releasePausedJob(job.id);
+        console.log(`[Worker] Job ${job.id} paused; checking the next eligible job`);
+        continue;
+      }
       failQueueJob(job.id, error);
       console.error(`[Worker] Job ${job.id} failed:`, error);
     }

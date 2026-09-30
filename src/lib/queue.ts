@@ -3,6 +3,7 @@ import { toStoredPath } from "./paths";
 
 export type VideoJobData = { videoId: string; filePath: string };
 export type QueueStatus = "wait" | "active" | "completed" | "failed";
+export type JobPauseMode = "paused" | "run" | null;
 export type QueueJob = {
   id: number;
   name: string;
@@ -10,6 +11,8 @@ export type QueueJob = {
   data: VideoJobData;
   progress: number;
   status: QueueStatus;
+  paused: boolean;
+  pauseMode: JobPauseMode;
   failedReason: string | null;
   timestamp: number;
   attempts: number;
@@ -34,6 +37,7 @@ type QueueJobRow = {
 };
 
 const PAUSED_KEY = "video-jobs:paused";
+const JOB_MODE_PREFIX = "video-jobs:mode:";
 const LEASE_MS = 30 * 60 * 1000;
 
 function now() {
@@ -56,7 +60,22 @@ function parseJobData(payload: string): VideoJobData {
   }
 }
 
-function mapJob(row: QueueJobRow): QueueJob {
+function jobModeKey(id: number) {
+  return `${JOB_MODE_PREFIX}${id}`;
+}
+
+function getJobPauseMode(id: number): JobPauseMode {
+  const value = database.query<{ value: string }, [string]>("SELECT value FROM queue_state WHERE key = ?").get(jobModeKey(id))?.value;
+  return value === "paused" || value === "run" ? value : null;
+}
+
+export function isJobPaused(id: number): boolean {
+  const mode = getJobPauseMode(id);
+  return mode === "paused" || (isQueuePaused() && mode !== "run");
+}
+
+function mapJob(row: QueueJobRow, globalPaused = isQueuePaused()): QueueJob {
+  const pauseMode = getJobPauseMode(row.id);
   return {
     id: row.id,
     name: row.name,
@@ -64,6 +83,9 @@ function mapJob(row: QueueJobRow): QueueJob {
     data: parseJobData(row.payload),
     progress: row.progress,
     status: row.status,
+    pauseMode,
+    paused: (row.status === "wait" || row.status === "active") &&
+      (pauseMode === "paused" || (globalPaused && pauseMode !== "run")),
     failedReason: row.failed_reason,
     timestamp: new Date(row.created_at).getTime(),
     attempts: row.attempts,
@@ -89,6 +111,8 @@ export function enqueueVideoJob(data: VideoJobData): QueueJob {
     data: normalizedData,
     progress: 0,
     status: "wait",
+    paused: isQueuePaused(),
+    pauseMode: null,
     failedReason: null,
     timestamp: new Date(timestamp).getTime(),
     attempts: 0,
@@ -109,24 +133,51 @@ export function isQueuePaused(): boolean {
 }
 
 export function setQueuePaused(paused: boolean): void {
-  database
-    .query(
+  database.transaction(() => {
+    database.query(
       "INSERT INTO queue_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-    )
-    .run(PAUSED_KEY, paused ? "1" : "0");
+    ).run(PAUSED_KEY, paused ? "1" : "0");
+    // A new global pause stops every job; overrides last only for that pause.
+    database.query("DELETE FROM queue_state WHERE key LIKE ? AND value = 'run'").run(`${JOB_MODE_PREFIX}%`);
+  })();
+}
+
+export function setJobPaused(id: number, paused: boolean): QueueJob | null {
+  return database.transaction(() => {
+    const job = database.query<{ status: QueueStatus }, [number]>(
+      "SELECT status FROM queue_jobs WHERE id = ?",
+    ).get(id);
+    if (job?.status !== "wait" && job?.status !== "active") return null;
+    const mode = paused ? "paused" : isQueuePaused() ? "run" : null;
+    if (mode) {
+      database.query(
+        "INSERT INTO queue_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      ).run(jobModeKey(id), mode);
+    } else {
+      database.query("DELETE FROM queue_state WHERE key = ?").run(jobModeKey(id));
+    }
+    return getQueueJob(id);
+  })();
 }
 
 export function getQueueStats(options: { page?: number; limit?: number } = {}) {
   const limit = Math.min(50, Math.max(1, Math.floor(options.limit || 50)));
   const page = Math.max(1, Math.floor(options.page || 1));
   const offset = (page - 1) * limit;
-  const counts = { wait: 0, active: 0, completed: 0, failed: 0, delayed: 0 };
+  const counts = { wait: 0, active: 0, completed: 0, failed: 0, delayed: 0, paused: 0 };
+  const globalPaused = isQueuePaused();
   for (const row of database
     .query<{ status: QueueStatus; count: number }, []>(
       "SELECT status, COUNT(*) AS count FROM queue_jobs GROUP BY status",
     )
     .all())
     counts[row.status] = Number(row.count);
+  counts.paused = Number(database.query<{ count: number }, [string, number]>(
+    `SELECT COUNT(*) count FROM queue_jobs q
+     LEFT JOIN queue_state s ON s.key = ? || q.id
+     WHERE q.status = 'wait' AND (s.value = 'paused' OR (? = 1 AND COALESCE(s.value, '') <> 'run'))`,
+  ).get(JOB_MODE_PREFIX, Number(globalPaused))?.count || 0);
+  counts.wait -= counts.paused;
   const total = database
     .query<{ count: number }, []>("SELECT COUNT(*) count FROM queue_jobs")
     .get()?.count || 0;
@@ -140,8 +191,8 @@ export function getQueueStats(options: { page?: number; limit?: number } = {}) {
        ORDER BY q.created_at DESC LIMIT ? OFFSET ?`,
     )
     .all(limit, offset)
-    .map(mapJob);
-  return { counts, recentJobs, isPaused: isQueuePaused(), page, limit, total, totalPages: Math.max(1, Math.ceil(Number(total) / limit)) };
+    .map((row) => mapJob(row, globalPaused));
+  return { counts, recentJobs, isPaused: globalPaused, page, limit, total, totalPages: Math.max(1, Math.ceil(Number(total) / limit)) };
 }
 
 export function getQueueJob(id: number): QueueJob | null {
@@ -159,14 +210,22 @@ export function getQueueJob(id: number): QueueJob | null {
 }
 
 export function deleteQueueJob(id: number): QueueJob | null {
-  const job = getQueueJob(id);
-  if (!job || job.status === "completed") return null;
-  database.query("DELETE FROM queue_jobs WHERE id = ? AND status <> 'completed'").run(id);
-  return job;
+  return database.transaction(() => {
+    const job = getQueueJob(id);
+    if (!job || job.status === "completed") return null;
+    database.query("DELETE FROM queue_jobs WHERE id = ? AND status <> 'completed'").run(id);
+    database.query("DELETE FROM queue_state WHERE key = ?").run(jobModeKey(id));
+    return job;
+  })();
 }
 
 export function removePendingJobsForVideo(videoId: string): void {
-  database.query("DELETE FROM queue_jobs WHERE video_id = ? AND status <> 'completed'").run(videoId);
+  database.transaction(() => {
+    database.query(
+      "DELETE FROM queue_state WHERE key IN (SELECT ? || id FROM queue_jobs WHERE video_id = ? AND status <> 'completed')",
+    ).run(JOB_MODE_PREFIX, videoId);
+    database.query("DELETE FROM queue_jobs WHERE video_id = ? AND status <> 'completed'").run(videoId);
+  })();
 }
 
 export function recoverExpiredJobs(): number {
@@ -179,16 +238,20 @@ export function recoverExpiredJobs(): number {
 }
 
 export function claimNextJob(): QueueJob | null {
-  if (isQueuePaused()) return null;
   recoverExpiredJobs();
   return database.transaction(() => {
+    const globalPaused = isQueuePaused();
     const candidate = database
-      .query<QueueJobRow, []>(
+      .query<QueueJobRow, [string, number]>(
         `SELECT q.id, q.name, q.video_id, q.payload, q.progress, q.status, q.failed_reason, q.created_at, q.attempts,
-          v.title, COALESCE(json_extract(v.metadata, '$.size'), 0) original_size, 0 processed_size
-         FROM queue_jobs q LEFT JOIN videos v ON v.id = q.video_id WHERE q.status = 'wait' ORDER BY q.created_at ASC LIMIT 1`,
+           v.title, COALESCE(json_extract(v.metadata, '$.size'), 0) original_size, 0 processed_size
+          FROM queue_jobs q LEFT JOIN videos v ON v.id = q.video_id
+          LEFT JOIN queue_state s ON s.key = ? || q.id
+          WHERE q.status = 'wait' AND COALESCE(s.value, '') <> 'paused'
+            AND (? = 0 OR s.value = 'run')
+          ORDER BY q.created_at ASC, q.id ASC LIMIT 1`,
       )
-      .get();
+      .get(JOB_MODE_PREFIX, Number(globalPaused));
     if (!candidate) return null;
     const leaseExpiresAt = new Date(Date.now() + LEASE_MS).toISOString();
     const result = database
@@ -199,8 +262,15 @@ export function claimNextJob(): QueueJob | null {
     if (!result.changes) return null;
     candidate.status = "active";
     candidate.attempts += 1;
-    return mapJob(candidate);
+    return mapJob(candidate, globalPaused);
   })();
+}
+
+export function releasePausedJob(id: number): void {
+  database.query(
+    `UPDATE queue_jobs SET status = 'wait', progress = 0, started_at = NULL, lease_expires_at = NULL,
+      attempts = MAX(0, attempts - 1) WHERE id = ? AND status = 'active'`,
+  ).run(id);
 }
 
 export function updateQueueProgress(id: number, progress: number): void {
@@ -212,18 +282,23 @@ export function updateQueueProgress(id: number, progress: number): void {
 }
 
 export function completeQueueJob(id: number): void {
-  database
-    .query(
+  database.transaction(() => {
+    const result = database.query(
       "UPDATE queue_jobs SET status = 'completed', progress = 100, completed_at = ?, lease_expires_at = NULL WHERE id = ? AND status = 'active'",
-    )
-    .run(now(), id);
+    ).run(now(), id);
+    if (result.changes) database.query("DELETE FROM queue_state WHERE key = ?").run(jobModeKey(id));
+  })();
 }
 
 export function failQueueJob(id: number, error: unknown): void {
   const reason = error instanceof Error ? error.message : String(error);
-  database
-    .query(
+  database.transaction(() => {
+    database.query(
       "UPDATE queue_jobs SET status = CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'wait' END, failed_reason = ?, lease_expires_at = NULL WHERE id = ? AND status = 'active'",
-    )
-    .run(reason, id);
+    ).run(reason, id);
+    const status = database.query<{ status: QueueStatus }, [number]>(
+      "SELECT status FROM queue_jobs WHERE id = ?",
+    ).get(id)?.status;
+    if (status === "failed") database.query("DELETE FROM queue_state WHERE key = ?").run(jobModeKey(id));
+  })();
 }
