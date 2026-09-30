@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Activity, Clock, AlertTriangle, CheckCircle, Trash2, Loader2, PauseCircle, PlayCircle } from 'lucide-react';
 import { cn, formatBytes } from '@/lib/utils';
 import { PageHeader, Pager, StatusPill, btn, panelClass, tableClass, type Tone } from '@/components/ui';
@@ -12,12 +12,15 @@ type QueueData = {
     completed: number;
     failed: number;
     delayed: number;
+    paused: number;
   };
   recentJobs: Array<{
     id: number;
     name: string;
     progress: number;
     status: string;
+    paused: boolean;
+    pauseMode: 'paused' | 'run' | null;
     failedReason?: string;
     timestamp: number;
     videoId: string;
@@ -35,28 +38,27 @@ export default function TasksPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await fetch(`/api/queue?page=${page}&limit=50`, { cache: 'no-store' });
-        if (res.ok) {
-          setData(await res.json());
-        }
-      } catch (err) {
-        console.error('Failed to fetch queue data:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-    const intervalId = setInterval(fetchData, 15000);
-    const refresh = () => void fetchData();
-    window.addEventListener('admin-data-refresh', refresh);
-    return () => { clearInterval(intervalId); window.removeEventListener('admin-data-refresh', refresh); };
+  const refreshQueue = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/queue?page=${page}&limit=50`, { cache: 'no-store' });
+      if (res.ok) setData(await res.json());
+    } catch (err) {
+      console.error('Failed to fetch queue data:', err);
+    } finally {
+      setIsLoading(false);
+    }
   }, [page]);
 
+  useEffect(() => {
+    void refreshQueue();
+    const intervalId = setInterval(() => void refreshQueue(), 10000);
+    const refresh = () => void refreshQueue();
+    window.addEventListener('admin-data-refresh', refresh);
+    return () => { clearInterval(intervalId); window.removeEventListener('admin-data-refresh', refresh); };
+  }, [refreshQueue]);
+
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [changingJobId, setChangingJobId] = useState<number | null>(null);
   const [isQueueActionLoading, setIsQueueActionLoading] = useState(false);
 
   const handleDeleteJob = async (jobId: number) => {
@@ -100,13 +102,35 @@ export default function TasksPage() {
         return;
       }
 
-      const payload = await res.json();
-      setData((prev) => (prev ? { ...prev, isPaused: payload.isPaused } : prev));
+      await refreshQueue();
     } catch (error) {
       console.error(error);
       alert('Network error while updating queue state');
     } finally {
       setIsQueueActionLoading(false);
+    }
+  };
+
+  const handleJobPauseToggle = async (job: QueueData['recentJobs'][number]) => {
+    const action = job.paused ? 'resume' : 'pause';
+    setChangingJobId(job.id);
+    try {
+      const res = await fetch(`/api/queue/${job.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        alert(`Failed to ${action} video: ${error.error || 'Unknown error'}`);
+        return;
+      }
+      await refreshQueue();
+    } catch (error) {
+      console.error(error);
+      alert('Network error while updating video processing');
+    } finally {
+      setChangingJobId(null);
     }
   };
 
@@ -118,6 +142,7 @@ export default function TasksPage() {
           <>
             <CountChip count={data?.counts.active || 0} label="active" tone="info" icon={<Activity size={12} />} />
             <CountChip count={data?.counts.wait || 0} label="waiting" tone="warn" icon={<Clock size={12} />} />
+            <CountChip count={data?.counts.paused || 0} label="paused" tone="warn" icon={<PauseCircle size={12} />} />
             <CountChip count={data?.counts.completed || 0} label="done" tone="ok" icon={<CheckCircle size={12} />} />
             <CountChip count={data?.counts.failed || 0} label="failed" tone="bad" icon={<AlertTriangle size={12} />} />
           </>
@@ -125,7 +150,7 @@ export default function TasksPage() {
       >
         <QueueStateSwitch
           isPaused={data?.isPaused ?? false}
-          disabled={isQueueActionLoading || !data}
+          disabled={isQueueActionLoading || changingJobId !== null || !data}
           loading={isQueueActionLoading}
           onToggle={handleQueuePauseToggle}
         />
@@ -162,7 +187,18 @@ export default function TasksPage() {
                     {new Date(job.timestamp).toLocaleString()}
                   </td>
                   <td>
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-2">
+                      {(job.status === 'wait' || job.status === 'active') && (
+                        <button
+                          onClick={() => handleJobPauseToggle(job)}
+                          disabled={changingJobId !== null || isQueueActionLoading}
+                          className={btn('soft', 'icon-sm')}
+                          title={job.paused ? 'Resume this video (even during global pause)' : 'Pause this video'}
+                          aria-label={`${job.paused ? 'Resume' : 'Pause'} processing ${job.title || job.videoId}`}
+                        >
+                          {changingJobId === job.id ? <Loader2 size={17} className="animate-spin" /> : job.paused ? <PlayCircle size={17} /> : <PauseCircle size={17} />}
+                        </button>
+                      )}
                       {job.status !== 'completed' && (
                         <button
                           onClick={() => handleDeleteJob(job.id)}
@@ -191,6 +227,9 @@ export default function TasksPage() {
 }
 
 function JobProgress({ job }: { job: QueueData['recentJobs'][number] }) {
+  if (job.paused) {
+    return <StatusPill tone="warn" icon={<PauseCircle size={12} />}>{job.status === 'active' ? 'Pausing…' : 'Paused'}</StatusPill>;
+  }
   if (job.status === 'active') {
     return (
       <div className="flex items-center gap-3">
