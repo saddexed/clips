@@ -66,20 +66,42 @@ export function clearLoginAttempts(key: string) {
   loginAttempts.delete(key);
 }
 
+export function hasValidRequestOrigin(request: Request) {
+  const value = request.headers.get("origin");
+  if (!value) return true;
+
+  try {
+    const origin = new URL(value);
+    if (!(["http:", "https:"].includes(origin.protocol)) || origin.origin !== value) return false;
+    if (origin.origin === new URL(request.url).origin) return true;
+
+    // Behind Caddy, request.url can contain the internal upstream address.
+    // Caddy supplies the browser-facing host and scheme in these headers.
+    const host = request.headers.get("x-forwarded-host");
+    const proto = request.headers.get("x-forwarded-proto");
+    if (!host || !/^[a-z0-9.:[\]_-]+$/i.test(host) || (proto !== "http" && proto !== "https")) {
+      return false;
+    }
+    return origin.origin === new URL(`${proto}://${host}`).origin;
+  } catch {
+    return false;
+  }
+}
+
 export async function requireAdmin(request?: Request) {
   if (!isAuthConfigured()) {
     return NextResponse.json({ error: "Authentication is not configured" }, { status: 503 });
   }
 
-  const origin = request?.headers.get("origin");
-  if (origin && request) {
-    try {
-      if (new URL(origin).origin !== new URL(request.url).origin) {
-        return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
-      }
-    } catch {
-      return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
-    }
+  if (request && !hasValidRequestOrigin(request)) {
+    console.warn("[auth] request origin mismatch", {
+      origin: request.headers.get("origin"),
+      requestOrigin: new URL(request.url).origin,
+      host: request.headers.get("host"),
+      forwardedHost: request.headers.get("x-forwarded-host"),
+      forwardedProto: request.headers.get("x-forwarded-proto"),
+    });
+    return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
   }
 
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
