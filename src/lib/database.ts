@@ -253,7 +253,7 @@ function pathExists(value: string) {
   const resolved = resolveStoredPath(value);
   return resolved ? existsSync(resolved) : false;
 }
-function mediaPaths(id: string, name: string, mediaType: MediaType) {
+function mediaPaths(id: string, name: string, mediaType: MediaType, status: VideoStatus) {
   const originalExtension = extension(name) || ".webm";
   const uploadPath = storedPath(".uploads", id, originalExtension);
   const canonicalOriginalPath = toStoredPath(vaultArtifactPath(id, name, "original", mediaType));
@@ -268,7 +268,9 @@ function mediaPaths(id: string, name: string, mediaType: MediaType) {
     : pathExists(legacyVaultOriginalPath)
       ? legacyVaultOriginalPath
       : uploadPath;
-  const processedPath = [canonicalConvertedPath, legacyVaultConvertedPath, legacyProcessedPath]
+  // The worker writes to processed/<id>.webm while transcoding. Do not serve
+  // that partial file until a legacy record has actually completed.
+  const processedPath = [canonicalConvertedPath, legacyVaultConvertedPath, ...(status === "COMPLETED" ? [legacyProcessedPath] : [])]
     .find((candidate) => pathExists(candidate) && candidate !== originalPath) || null;
   const activePath = processedPath || (
     pathExists(canonicalOriginalPath)
@@ -289,7 +291,7 @@ function mapVideo(row: VideoRow, tags: Tag[]): Video {
     ? metadata.created_at : row.created_at;
   const name = filename(metadata, row.id);
   const mediaType: MediaType = String(metadata?.contentType || "").startsWith("image/") ? "IMAGE" : "VIDEO";
-  const paths = mediaPaths(row.id, name, mediaType);
+  const paths = mediaPaths(row.id, name, mediaType, row.status);
   const activeMetadata = paths.processedPath
     ? {
         ...metadata,
@@ -390,6 +392,10 @@ export function listJobHistoryPage(page = 1, limit = 50) {
 export function jobHistoryForVideo(videoId: string) { return database.query<HistoryRow, [string]>("SELECT j.*,v.title video_title,json_extract(v.metadata,'$.filename') video_filename,v.metadata video_original_metadata FROM job_history j LEFT JOIN videos v ON v.id=j.video_id WHERE j.video_id=? ORDER BY j.started_at").all(videoId).map(historyMap); }
 export function updateJobHistory(id: string, metadata: Record<string, unknown>) { database.query("UPDATE job_history SET metadata=? WHERE id=?").run(JSON.stringify(metadata), id); }
 export function search(q: string, isAdmin: boolean, sortField?: VideoSortField, sortOrder?: VideoSortOrder) { const like = `%${q}%`; const tags = database.query<Pick<Tag, "name">, [string]>("SELECT name FROM tags WHERE deleted_at IS NULL AND name LIKE ? COLLATE NOCASE ORDER BY name LIMIT 12").all(like); const visibility = isAdmin ? "" : " AND v.is_hidden=0"; const rows = database.query<{ id: string; title: string; metadata: string }, [string, string, string]>(`SELECT DISTINCT v.id,v.title,v.metadata FROM videos v LEFT JOIN video_tags vt ON vt.video_id=v.id LEFT JOIN tags t ON t.id=vt.tag_id WHERE v.deleted_at IS NULL${visibility} AND (v.title LIKE ? COLLATE NOCASE OR json_extract(v.metadata,'$.filename') LIKE ? COLLATE NOCASE OR t.name LIKE ? COLLATE NOCASE) ORDER BY ${videoOrderBy(sortField, sortOrder, "v.")} LIMIT 20`).all(like, like, like); return { tags, videos: rows.map((row) => ({ id: row.id, title: row.title, filename: filename(decodeJson(row.metadata), row.id) })) }; }
-export function getSetting(key: string) { const row = database.query<{ value: string }, [string]>("SELECT value FROM app_settings WHERE key=?").get(key); return row ? decodeJson(row.value) : undefined; }
+export function getSetting(key: string): unknown {
+  const row = database.query<{ value: string }, [string]>("SELECT value FROM app_settings WHERE key=?").get(key);
+  if (!row) return undefined;
+  try { return JSON.parse(row.value) as unknown; } catch { return undefined; }
+}
 export function setSetting(key: string, value: unknown) { database.query("INSERT INTO app_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").run(key, JSON.stringify(value), now()); }
 database.exec("PRAGMA foreign_keys = ON;");

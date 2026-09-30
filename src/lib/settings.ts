@@ -1,6 +1,12 @@
-import { getSetting, setSetting } from "@/lib/database";
+import { database, getSetting, setSetting } from "@/lib/database";
 
 export const DEFAULT_FFMPEG_PARAMETERS = "-c:v libvpx-vp9 -profile:v 2 -pix_fmt yuv420p10le -deadline good -cpu-used 3 -tile-columns 2 -tile-rows 1 -threads 4 -row-mt 1 -crf 30 -b:v 8M -maxrate 8M -bufsize 16M -c:a libopus -b:a 128k";
+
+export type UploadDefaults = {
+  tags: string[];
+  visibilityEnabled: boolean;
+  ffmpegParameters: string;
+};
 
 function normalizeTags(tags: string[]): string[] {
   return Array.from(
@@ -48,6 +54,27 @@ export async function getUploadDefaults() {
     getDefaultVisibilityEnabled(),
   ]);
   return { tags, visibilityEnabled };
+}
+
+export async function saveUploadDefaults(input: { tags: string[]; visibilityEnabled: boolean; ffmpegParameters: string }): Promise<UploadDefaults> {
+  const tags = normalizeTags(input.tags);
+  const visibilityEnabled = Boolean(input.visibilityEnabled);
+  const ffmpegParameters = input.ffmpegParameters.trim();
+  database.transaction(() => {
+    setSetting("default_tags", tags);
+    setSetting("default_visibility_enabled", visibilityEnabled);
+    setSetting("ffmpeg_parameters", ffmpegParameters);
+  })();
+  return { tags: await getDefaultTags(), visibilityEnabled: await getDefaultVisibilityEnabled(), ffmpegParameters: getFfmpegParameters() };
+}
+
+export async function resetUploadDefaults(): Promise<UploadDefaults> {
+  database.transaction(() => {
+    setSetting("default_tags", []);
+    setSetting("default_visibility_enabled", false);
+    setSetting("ffmpeg_parameters", DEFAULT_FFMPEG_PARAMETERS);
+  })();
+  return { tags: await getDefaultTags(), visibilityEnabled: await getDefaultVisibilityEnabled(), ffmpegParameters: getFfmpegParameters() };
 }
 
 export function getFfmpegParameters(): string {

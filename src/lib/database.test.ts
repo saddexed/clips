@@ -1,13 +1,59 @@
 import { expect, test } from "bun:test";
+import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   createVideo,
   deleteVideo,
   findVideoIdByOriginalSha256,
+  getVideo,
   listVideosPage,
   listVideos,
   updateVideo,
 } from "./database";
 import { hashBytes } from "./hash";
+import { toStoredPath, vaultArtifactPath } from "./paths";
+
+test("serves the original until the worker publishes a completed transcode", async () => {
+  const id = crypto.randomUUID();
+  const filename = `${id}.mp4`;
+  const previousDataPath = process.env.DATA_PATH;
+  const directory = await mkdtemp(path.join(tmpdir(), "clips-preview-"));
+  process.env.DATA_PATH = directory;
+  try {
+    const originalPath = vaultArtifactPath(id, filename, "original");
+    const convertedPath = vaultArtifactPath(id, filename, "converted");
+    const temporaryPath = path.join(directory, "processed", `${id}.webm`);
+    await mkdir(path.dirname(originalPath), { recursive: true });
+    await mkdir(path.dirname(temporaryPath), { recursive: true });
+    await writeFile(originalPath, "full original");
+    await writeFile(temporaryPath, "incomplete transcode");
+
+    const now = new Date();
+    createVideo({
+      id, filename, title: "processing preview", status: "QUEUED",
+      originalSha256: hashBytes(new TextEncoder().encode(id)), originalSize: 13,
+      createdAt: now, uploadedAt: now, isHidden: false,
+    });
+    const original = toStoredPath(originalPath);
+    expect(getVideo(id)?.activePath).toBe(original);
+    updateVideo(id, { status: "PROCESSING" });
+    expect(getVideo(id)?.activePath).toBe(original);
+    expect(getVideo(id)?.processedPath).toBeNull();
+
+    // Completed legacy records may still store their final file in processed/.
+    updateVideo(id, { status: "COMPLETED" });
+    expect(getVideo(id)?.activePath).toBe(`processed/${id}.webm`);
+    await mkdir(path.dirname(convertedPath), { recursive: true });
+    await rename(temporaryPath, convertedPath);
+    expect(getVideo(id)?.activePath).toBe(toStoredPath(convertedPath));
+  } finally {
+    deleteVideo(id);
+    if (previousDataPath === undefined) delete process.env.DATA_PATH;
+    else process.env.DATA_PATH = previousDataPath;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("original upload hashes are unique in SQLite", () => {
   const originalSha256 = hashBytes(
