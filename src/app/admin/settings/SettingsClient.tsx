@@ -229,11 +229,10 @@ export default function SettingsClient({
         }),
       });
 
-      const payload = await res.json();
-
       if (!res.ok) {
-        throw new Error(payload?.error || "Failed to save default tags");
+        throw new Error(await getResponseError(res, `Failed to save defaults (HTTP ${res.status})`));
       }
+      const payload = await res.json();
 
       const normalizedTags = Array.isArray(payload.tags)
         ? payload.tags.map((t: string) => normalizeTag(t)).filter(Boolean)
@@ -244,6 +243,33 @@ export default function SettingsClient({
       setMessage("Upload defaults saved.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const resetDefaults = async () => {
+    if (!window.confirm("Reset upload defaults to the original settings?")) return;
+    setIsSaving(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const response = await fetch("/api/settings/default-tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset" }),
+      });
+      if (!response.ok) {
+        throw new Error(await getResponseError(response, `Failed to reset defaults (HTTP ${response.status})`));
+      }
+      const payload = await response.json();
+      setSelectedTags(Array.isArray(payload.tags) ? payload.tags : []);
+      setTagQuery("");
+      setVisibilityEnabled(Boolean(payload.visibilityEnabled));
+      setFfmpegParameters(payload.ffmpegParameters || "");
+      setMessage("Upload defaults reset.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to reset defaults");
     } finally {
       setIsSaving(false);
     }
@@ -287,16 +313,22 @@ export default function SettingsClient({
         title="Upload defaults"
         description="Applied to every new upload."
         footer={
-          <>
+          <div className="flex w-full flex-wrap items-center justify-between gap-3">
             <div className="min-h-5">
               {message ? <Notice tone="ok">{message}</Notice> : null}
               {error ? <Notice tone="bad">{error}</Notice> : null}
             </div>
-            <button className={btn("solid")} onClick={save} disabled={isSaving}>
-              <Save size={16} />
-              {isSaving ? "Saving…" : "Save defaults"}
-            </button>
-          </>
+            <div className="flex items-center gap-2">
+              <button type="button" className={btn("ghost")} onClick={() => void resetDefaults()} disabled={isSaving}>
+                <RotateCcw size={15} />
+                Reset
+              </button>
+              <button type="button" className={btn("solid")} onClick={() => void save()} disabled={isSaving}>
+                <Save size={16} />
+                {isSaving ? "Saving…" : "Save defaults"}
+              </button>
+            </div>
+          </div>
         }
       >
         <div className="flex flex-col gap-2">
@@ -354,12 +386,14 @@ export default function SettingsClient({
 
         <label className="flex flex-col gap-2">
           <span className={labelClass}>Encoder parameters</span>
-          <input
+          <textarea
+            rows={3}
             value={ffmpegParameters}
             onChange={(event) => setFfmpegParameters(event.target.value)}
             aria-label="Encoder parameters"
             spellCheck={false}
-            className={cn(inputClass, "font-mono text-xs")}
+            wrap="soft"
+            className={cn(inputClass, "min-h-20 resize-y py-2 font-mono text-xs leading-5")}
           />
           <span className="text-xs text-muted">
             A leading <code className="font-mono">ffmpeg</code> is optional. Input, output, format and overwrite options are set by the app.
