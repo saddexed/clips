@@ -253,7 +253,7 @@ function pathExists(value: string) {
   const resolved = resolveStoredPath(value);
   return resolved ? existsSync(resolved) : false;
 }
-function mediaPaths(id: string, name: string, mediaType: MediaType) {
+function mediaPaths(id: string, name: string, mediaType: MediaType, status: VideoStatus) {
   const originalExtension = extension(name) || ".webm";
   const uploadPath = storedPath(".uploads", id, originalExtension);
   const canonicalOriginalPath = toStoredPath(vaultArtifactPath(id, name, "original", mediaType));
@@ -268,7 +268,9 @@ function mediaPaths(id: string, name: string, mediaType: MediaType) {
     : pathExists(legacyVaultOriginalPath)
       ? legacyVaultOriginalPath
       : uploadPath;
-  const processedPath = [canonicalConvertedPath, legacyVaultConvertedPath, legacyProcessedPath]
+  // The worker writes to processed/<id>.webm while transcoding. Do not serve
+  // that partial file until a legacy record has actually completed.
+  const processedPath = [canonicalConvertedPath, legacyVaultConvertedPath, ...(status === "COMPLETED" ? [legacyProcessedPath] : [])]
     .find((candidate) => pathExists(candidate) && candidate !== originalPath) || null;
   const activePath = processedPath || (
     pathExists(canonicalOriginalPath)
@@ -289,7 +291,7 @@ function mapVideo(row: VideoRow, tags: Tag[]): Video {
     ? metadata.created_at : row.created_at;
   const name = filename(metadata, row.id);
   const mediaType: MediaType = String(metadata?.contentType || "").startsWith("image/") ? "IMAGE" : "VIDEO";
-  const paths = mediaPaths(row.id, name, mediaType);
+  const paths = mediaPaths(row.id, name, mediaType, row.status);
   const activeMetadata = paths.processedPath
     ? {
         ...metadata,

@@ -67,6 +67,7 @@ export async function GET(
         headers: {
           "Content-Range": `bytes ${start}-${end}/${size}`,
           "Accept-Ranges": "bytes",
+          "Cache-Control": "no-store",
           "Content-Length": chunksize.toString(),
           "Content-Type": mediaMimeType(
             video.activeMetadata || video.originalMetadata,
@@ -83,6 +84,7 @@ export async function GET(
         status: 200,
         headers: {
           "Content-Length": size.toString(),
+          "Cache-Control": "no-store",
           "Content-Type": mediaMimeType(
             video.activeMetadata || video.originalMetadata,
             path.extname(filePath),
