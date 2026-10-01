@@ -274,12 +274,21 @@ export async function listTrashItems(page = 1, limit = 50) {
   await syncTrashIndex();
   await purgeExpiredTrash();
   const result = listTrashArtifactRows(page, limit);
-  const items = await Promise.all(result.items.map(async (item) => ({
-    ...item,
-    deletedAt: item.deletedAt.toISOString(),
-    missing: !(await findArtifact(item.videoId, item.filename, item.artifactKind)),
-  })));
-  return { ...result, items };
+    const items = await Promise.all(result.items.map(async (item) => {
+      const artifactPath = await findArtifact(item.videoId, item.filename, item.artifactKind);
+      let size = item.size;
+      if (artifactPath) {
+        try { size = (await stat(artifactPath)).size; } catch { /* The artifact may disappear between indexing and listing. */ }
+      }
+      return {
+        ...item,
+        size,
+        deletedAt: item.deletedAt.toISOString(),
+        missing: !artifactPath,
+      };
+    }));
+  const totalSize = items.reduce((sum, item) => sum + item.size, 0);
+  return { ...result, items, totalSize };
 }
 
 export async function clearTrash() {

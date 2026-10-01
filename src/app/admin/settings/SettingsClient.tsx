@@ -11,6 +11,7 @@ type TrashItem = {
   title: string;
   filename: string;
   deletedAt: string;
+  size: number;
   missing: boolean;
 };
 
@@ -26,10 +27,23 @@ async function getResponseError(response: Response, fallback: string) {
   return fallback;
 }
 
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+  return `${(value / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
 function formatDeletedAt(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
+function daysRemaining(value: string) {
+  const deletedAt = new Date(value).getTime();
+  if (!Number.isFinite(deletedAt)) return null;
+  return Math.max(0, Math.ceil((deletedAt + 14 * 24 * 60 * 60 * 1000 - Date.now()) / (24 * 60 * 60 * 1000)));
+}
+
 
 function Section({
   title,
@@ -105,6 +119,7 @@ export default function SettingsClient({
   const [trashPage, setTrashPage] = useState(1);
   const [trashTotalPages, setTrashTotalPages] = useState(1);
   const [trashTotal, setTrashTotal] = useState(0);
+  const [trashTotalSize, setTrashTotalSize] = useState(0);
   const [isLoadingTrash, setIsLoadingTrash] = useState(true);
   const [trashAction, setTrashAction] = useState<string | null>(null);
   const [trashMessage, setTrashMessage] = useState<string | null>(null);
@@ -123,12 +138,14 @@ export default function SettingsClient({
         total?: number;
         totalPages?: number;
         hasMore?: boolean;
+        totalSize?: number;
         error?: string;
       };
       if (!response.ok) {
         throw new Error(payload.error || "Failed to load trash.");
       }
       setTrashItems(Array.isArray(payload.items) ? payload.items : []);
+      setTrashTotalSize(Number.isFinite(payload.totalSize) ? Math.max(0, Number(payload.totalSize)) : 0);
       const currentPage = Number.isFinite(payload.page) ? Math.max(1, Number(payload.page)) : safePage;
       const total = Number.isFinite(payload.total) ? Math.max(0, Number(payload.total)) : 0;
       const totalPages = Number.isFinite(payload.totalPages)
@@ -452,7 +469,8 @@ export default function SettingsClient({
         description="Kept for 14 days, then deleted for good."
         actions={
           trashTotal > 0 || trashItems.length > 0 ? (
-            <button
+            <div className="flex flex-col items-end gap-1">
+              <button
               className={btn("danger", "sm")}
               onClick={() => void runTrashAction({
                 key: "clear",
@@ -466,7 +484,9 @@ export default function SettingsClient({
             >
               <Trash2 size={14} />
               Empty trash
-            </button>
+              </button>
+              {trashTotalSize > 0 ? <span className="text-xs text-muted">{formatBytes(trashTotalSize)} total</span> : null}
+            </div>
           ) : null
         }
       >
@@ -483,9 +503,8 @@ export default function SettingsClient({
               <thead>
                 <tr>
                   <th scope="col">Clip</th>
-                  <th scope="col">File</th>
                   <th scope="col">Deleted</th>
-                  <th scope="col">Status</th>
+                  <th scope="col" className="text-center">Size</th>
                   <th scope="col" className="text-right">Actions</th>
                 </tr>
               </thead>
@@ -498,16 +517,13 @@ export default function SettingsClient({
                         <div className="mt-0.5 break-all font-mono text-[0.6875rem] text-muted">{item.filename}</div>
                       ) : null}
                     </td>
-                    <td className="whitespace-nowrap">
-                      <StatusPill tone="neutral">{item.artifactKind === "original" ? "Original" : "Converted"}</StatusPill>
+                    <td className="whitespace-nowrap text-muted">
+                      <div>{formatDeletedAt(item.deletedAt)}</div>
+                      {daysRemaining(item.deletedAt) !== null ? <div className="mt-1 text-xs">{daysRemaining(item.deletedAt)} days remaining</div> : null}
                     </td>
-                    <td className="whitespace-nowrap text-muted">{formatDeletedAt(item.deletedAt)}</td>
-                    <td>
-                      {item.missing ? (
-                        <StatusPill tone="bad" icon={<AlertCircle size={12} />}>Missing file</StatusPill>
-                      ) : (
-                        <StatusPill tone="ok">Available</StatusPill>
-                      )}
+                    <td className="whitespace-nowrap text-center">
+                      <StatusPill tone="neutral">{item.artifactKind === "original" ? "Original" : "Converted"}</StatusPill>
+                      <div className="mt-1 font-mono text-xs text-muted">{formatBytes(item.size)}</div>
                     </td>
                     <td>
                       <div className="flex justify-end gap-1">
