@@ -309,6 +309,17 @@ export function listDeletedVideos() {
 export function findVideoIdByOriginalSha256(hash: string) { return database.query<{ id: string }, [string]>("SELECT id FROM videos WHERE sha256_hash=?").get(hash)?.id || null; }
 export type VideoSortField = "title" | "duration" | "originalSize" | "date" | "uploadedAt";
 export type VideoSortOrder = "asc" | "desc";
+export type VideoLibraryStats = { count: number; videos: number; images: number; size: number; duration: number };
+export function getVideoLibraryStats(): VideoLibraryStats {
+  return database.query<VideoLibraryStats, []>(`
+    SELECT COUNT(*) count,
+      COALESCE(SUM(CASE WHEN COALESCE(json_extract(metadata, '$.contentType'), '') LIKE 'image/%' THEN 0 ELSE 1 END), 0) videos,
+      COALESCE(SUM(CASE WHEN COALESCE(json_extract(metadata, '$.contentType'), '') LIKE 'image/%' THEN 1 ELSE 0 END), 0) images,
+      COALESCE(SUM(CASE WHEN COALESCE(json_extract(metadata, '$.contentType'), '') NOT LIKE 'image/%' THEN size ELSE 0 END), 0) size,
+      COALESCE(SUM(CASE WHEN COALESCE(json_extract(metadata, '$.contentType'), '') NOT LIKE 'image/%' THEN json_extract(metadata, '$.duration') ELSE 0 END), 0) duration
+    FROM videos WHERE deleted_at IS NULL
+  `).get()!;
+}
 // Every video list orders through this one mapping so a requested sort is what the
 // SQL uses, and the same field means the same thing in each list.
 function videoSortColumns(prefix: string): Record<VideoSortField, string> {

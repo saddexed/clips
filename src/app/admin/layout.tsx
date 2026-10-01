@@ -1,21 +1,27 @@
 import Link from 'next/link';
-import { Home, LogOut } from 'lucide-react';
+import { connection } from 'next/server';
+import { Home, Image as ImageIcon, LogOut, Video as VideoIcon } from 'lucide-react';
 import '../globals.css';
 import { GlobalUploadProvider } from '@/components/GlobalUploadProvider';
 import AdminReloadButton from '@/components/AdminReloadButton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { btn } from '@/lib/ui-classes';
 import { AdminNav } from './AdminNav';
+import { getVideoLibraryStats } from '@/lib/database';
+import { formatBytes, formatDuration } from '@/lib/utils';
 
 export const metadata = {
   title: 'Clips Admin',
 };
 
-export default function AdminLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  await connection();
+  const stats = getVideoLibraryStats();
+
   return (
     <GlobalUploadProvider>
       <div className="flex min-h-screen flex-col">
@@ -30,6 +36,29 @@ export default function AdminLayout({
             <div className="order-3 w-full sm:order-none sm:w-auto sm:flex-1">
               <AdminNav />
             </div>
+
+            <dl aria-label="Video library totals" className="order-4 flex w-full flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted xl:order-none xl:w-auto xl:flex-nowrap">
+              <div className="flex items-baseline gap-2 whitespace-nowrap">
+                <dt className="sr-only">Clips</dt>
+                <dd className="order-first flex items-baseline gap-2 whitespace-nowrap">
+                  <span className="font-semibold tabular-nums text-ink">{stats.count.toLocaleString()} clips</span>
+                  <span className="flex items-baseline gap-1.5 text-[0.6875rem] font-normal text-muted">
+                    <span role="img" className="inline-flex items-end gap-0.5" title="Images" aria-label={`${stats.images} images`}>
+                      ({stats.images} images)
+                    </span>
+                  </span>
+                </dd>
+              </div>
+              {[
+                ['used', formatBytes(stats.size)],
+                ['total length', formatDuration(stats.duration)],
+              ].map(([label, value]) => (
+                <div key={label} className="flex items-baseline gap-1 whitespace-nowrap">
+                  <dt>{label}</dt>
+                  <dd className="order-first font-semibold tabular-nums text-ink">{value}</dd>
+                </div>
+              ))}
+            </dl>
 
             <div className="ml-auto flex items-center gap-1.5">
               <AdminReloadButton />

@@ -13,7 +13,7 @@ export type SearchItem = {
 
 type SearchBarProps = {
   items: SearchItem[];
-  onResultsChange: (items: SearchItem[]) => void;
+  onResultsChange?: (items: SearchItem[]) => void;
   placeholder?: string;
   tagToAddSignal?: { tag: string; seq: number } | null;
   initialQuery?: string;
@@ -21,6 +21,8 @@ type SearchBarProps = {
   onFiltersChange?: (query: string, tags: string[]) => void;
   /** Header variant: pill shell, no max width, tighter height. */
   compact?: boolean;
+  className?: string;
+  matchCount?: number;
 };
 
 const chipClass = (selected: boolean) =>
@@ -38,6 +40,8 @@ export default function SearchBar({
   initialTags = [],
   onFiltersChange,
   compact = false,
+  className,
+  matchCount,
 }: SearchBarProps) {
   const normalizeTagText = (value: string) =>
     value
@@ -120,7 +124,7 @@ export default function SearchBar({
   }, [normalizedItems, normalizedQuery, selectedTags]);
 
   useEffect(() => {
-    onResultsChange(filteredItems);
+    onResultsChange?.(filteredItems);
   }, [filteredItems, onResultsChange]);
 
   const hasActiveFilters = selectedTags.length > 0 || normalizedQuery.length > 0;
@@ -169,7 +173,7 @@ export default function SearchBar({
   }, [tagToAddSignal?.seq]);
 
   return (
-    <div className={cn("relative w-full", !compact && "max-w-[860px]")}>
+    <div className={cn("relative w-full", !compact && "max-w-[860px]", className)}>
       <div
         ref={shellRef}
         className={cn(
@@ -239,6 +243,12 @@ export default function SearchBar({
               </span>
             ) : null}
           </div>
+        ) : null}
+
+        {hasActiveFilters && matchCount !== undefined ? (
+          <span role="status" className="ml-auto shrink-0 whitespace-nowrap rounded-full bg-surface-2/70 px-2.5 py-1 text-xs font-medium tabular-nums text-ink">
+            {matchCount} {matchCount === 1 ? "match" : "matches"}
+          </span>
         ) : null}
 
         {hasActiveFilters ? (

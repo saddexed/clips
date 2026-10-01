@@ -1,15 +1,15 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useTransition } from 'react';
 import { Pencil, X, Save, AlertCircle, CheckCircle, Clock, Activity, AlertTriangle, Eye, EyeOff, Trash2, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import SafeVideoPlayer from '@/components/SafeVideoPlayer';
 import SearchBar, { type SearchItem } from '@/components/SearchBar';
 import { mediaTypeLabel } from '@/lib/media';
 import { HistorySizeDetail, getActionDetails } from '@/lib/history-actions';
-import { cn, formatBytes } from '@/lib/utils';
+import { cn, formatBytes, formatDuration } from '@/lib/utils';
 import type { VideoSortField, VideoSortOrder } from '@/lib/database';
-import { Modal, Pager, Segmented, StatusPill, btn, inputClass, labelClass, panelClass, tableClass, type Tone } from '@/components/ui';
+import { Modal, PageHeader, Pager, Segmented, StatusPill, btn, inputClass, labelClass, panelClass, tableClass, type Tone } from '@/components/ui';
 
 type Video = {
   id: string;
@@ -50,7 +50,7 @@ export default function VideoTable({ initialVideos, page, total, totalPages, ini
   }, [initialVideos]);
 
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
-  const [filteredIds, setFilteredIds] = useState<Set<string> | null>(null);
+  const [isSearching, startSearch] = useTransition();
   const [tagToAddSignal, setTagToAddSignal] = useState<{ tag: string; seq: number } | null>(null);
 
   const handleSort = (field: VideoSortField) => {
@@ -60,11 +60,6 @@ export default function VideoTable({ initialVideos, page, total, totalPages, ini
     params.delete('page');
     router.push(`/admin?${params.toString()}`);
   };
-
-  const visibleVideos = useMemo(() => {
-    if (!filteredIds) return localVideos;
-    return localVideos.filter((video) => filteredIds.has(video.id));
-  }, [localVideos, filteredIds]);
 
   const searchItems = useMemo<SearchItem[]>(
     () =>
@@ -88,10 +83,6 @@ export default function VideoTable({ initialVideos, page, total, totalPages, ini
     [localVideos]
   );
 
-  const handleSearchResultsChange = useCallback((items: SearchItem[]) => {
-    setFilteredIds(new Set(items.map((item) => item.id)));
-  }, []);
-
   const handleFiltersChange = useCallback((query: string, tags: string[]) => {
     const params = new URLSearchParams(window.location.search);
     if ((params.get('q') || '') === query.trim() && (params.get('tag') || '') === tags.join(',')) return;
@@ -99,7 +90,7 @@ export default function VideoTable({ initialVideos, page, total, totalPages, ini
     if (tags.length) params.set('tag', tags.join(',')); else params.delete('tag');
     params.delete('page');
     const nextUrl = `/admin${params.toString() ? `?${params.toString()}` : ''}`;
-    if (`${window.location.pathname}${window.location.search}` !== nextUrl) router.replace(nextUrl);
+    if (`${window.location.pathname}${window.location.search}` !== nextUrl) startSearch(() => router.replace(nextUrl));
   }, [router]);
 
   const pageUrl = (nextPage: number) => {
@@ -136,6 +127,7 @@ export default function VideoTable({ initialVideos, page, total, totalPages, ini
     setLocalVideos(localVideos.filter(v => v.id !== id));
     try {
       await fetch(`/api/videos/${id}`, { method: 'DELETE' });
+      router.refresh();
     } catch (e) {
       console.error(e);
       // Revert logic would require caching the deleted item, but for now we accept the risk
@@ -143,19 +135,24 @@ export default function VideoTable({ initialVideos, page, total, totalPages, ini
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <SearchBar
-        items={searchItems}
-        onResultsChange={handleSearchResultsChange}
-        placeholder="Filter by title or tags"
-        tagToAddSignal={tagToAddSignal}
-        initialQuery={initialQuery}
-        initialTags={initialTags}
-        onFiltersChange={handleFiltersChange}
-      />
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+        <PageHeader title="Media library" />
+        <SearchBar
+          compact
+          className="min-w-0 flex-1"
+          items={searchItems}
+          placeholder="Search titles or tags"
+          tagToAddSignal={tagToAddSignal}
+          initialQuery={initialQuery}
+          initialTags={initialTags}
+          onFiltersChange={handleFiltersChange}
+          matchCount={isSearching ? undefined : total}
+        />
+      </div>
 
       <div className={cn(panelClass, 'overflow-x-auto')}>
-        {visibleVideos.length === 0 ? (
+        {localVideos.length === 0 ? (
           <div className="px-6 py-16 text-center text-muted">
             No clips match. Remove a tag or change the filter.
           </div>
@@ -174,7 +171,7 @@ export default function VideoTable({ initialVideos, page, total, totalPages, ini
               </tr>
             </thead>
             <tbody>
-              {visibleVideos.map((vid) => (
+              {localVideos.map((vid) => (
                 <tr
                   key={vid.id}
                   className={cn(
@@ -282,6 +279,7 @@ export default function VideoTable({ initialVideos, page, total, totalPages, ini
           onDelete={(id) => {
             setLocalVideos(localVideos.filter(v => v.id !== id));
             setEditingVideo(null);
+            router.refresh();
           }}
         />
       )}
@@ -675,14 +673,6 @@ function VideoStatus({ status }: { status: string }) {
     </span>
   );
 }
-
-function formatDuration(seconds: number) {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
-
 
 function getCompressionInfo(originalSize: number | bigint, processedSize: number | bigint | null) {
   const orig = Number(originalSize);

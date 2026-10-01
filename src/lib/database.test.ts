@@ -7,6 +7,7 @@ import {
   deleteVideo,
   findVideoIdByOriginalSha256,
   getVideo,
+  getVideoLibraryStats,
   listVideosPage,
   listVideos,
   updateVideo,
@@ -151,6 +152,36 @@ test("manage pagination keeps filtered results within page bounds", () => {
     expect(listVideosPage({ page: 2, limit: 2, query: title }).items.map((video) => video.id)).toEqual([ids[0]]);
     expect(listVideosPage({ page: 99, limit: 2, query: title }).page).toBe(2);
     expect(listVideosPage({ page: Number.NaN, limit: 2, query: title }).page).toBe(1);
+  } finally {
+    ids.forEach(deleteVideo);
+  }
+});
+
+test("library totals use current video sizes across pages and exclude trash and images", () => {
+  const baseline = getVideoLibraryStats();
+  const ids = Array.from({ length: 5 }, () => crypto.randomUUID());
+  const title = `totals-${ids[0]}`;
+  const now = new Date();
+  const sizes = [1000, 500, 2000, 9999, 9999];
+  const durations = [3600.75, 61.25, undefined, 9999, 9999];
+
+  try {
+    ids.forEach((id, index) => createVideo({
+      id, title: index === 4 ? "image" : title, status: index === 2 ? "QUEUED" : "COMPLETED",
+      size: sizes[index], createdAt: now, uploadedAt: now,
+      isHidden: index === 1, deletedAt: index === 3 ? now : null,
+      metadata: { filename: `${id}.mp4`, contentType: index === 4 ? "image/png" : "video/mp4", size: 50000, duration: durations[index] },
+    }));
+
+    const expected = { count: baseline.count + 4, videos: baseline.videos + 3, images: baseline.images + 1, size: baseline.size + 3500, duration: baseline.duration + 3662 };
+    expect(getVideoLibraryStats()).toEqual(expected);
+    expect(listVideosPage({ query: title, limit: 1, page: 2 }).total).toBe(3);
+    expect(getVideoLibraryStats()).toEqual(expected);
+
+    updateVideo(ids[0], { deletedAt: now });
+    expect(getVideoLibraryStats()).toEqual({ count: baseline.count + 3, videos: baseline.videos + 2, images: baseline.images + 1, size: baseline.size + 2500, duration: baseline.duration + 61.25 });
+    updateVideo(ids[0], { deletedAt: null });
+    expect(getVideoLibraryStats()).toEqual(expected);
   } finally {
     ids.forEach(deleteVideo);
   }
