@@ -362,7 +362,21 @@ export function updateVideo(id: string, updates: Omit<Partial<Video>, "tags"> & 
   return getVideo(id);
 }
 export type TrashArtifactKind = "original" | "converted";
-export type TrashArtifactRow = { videoId: string; artifactKind: TrashArtifactKind; deletedAt: Date; filename: string; title: string; missing: boolean };
+export type TrashArtifactRow = { videoId: string; artifactKind: TrashArtifactKind; deletedAt: Date; filename: string; title: string; size: number; missing: boolean };
+export type FilenameCollision = {
+  videoId: string;
+  title: string;
+  filename: string;
+  size: number;
+  createdAt: Date;
+  uploadedAt: Date;
+};
+export function findVideoByFilename(name: string): FilenameCollision | null {
+  const row = database.query<VideoRow, [string]>("SELECT * FROM videos WHERE deleted_at IS NULL AND json_extract(metadata, '$.filename') = ? COLLATE NOCASE ORDER BY uploaded_at DESC LIMIT 1").get(name);
+  if (!row) return null;
+  const video = mapVideo(row, []);
+  return { videoId: video.id, title: video.title, filename: video.filename, size: video.originalSize, createdAt: video.createdAt, uploadedAt: video.uploadedAt };
+}
 export function recordTrashArtifact(videoId: string, artifactKind: TrashArtifactKind, deletedAt = new Date()) {
   database.query("INSERT INTO trash_items(video_id,artifact_kind,deleted_at) VALUES(?,?,?) ON CONFLICT(video_id,artifact_kind) DO UPDATE SET deleted_at=excluded.deleted_at").run(videoId, artifactKind, deletedAt.toISOString());
 }
@@ -374,7 +388,7 @@ export function listTrashArtifactRows(page = 1, limit = 50) {
   const safePage = Math.max(1, Math.floor(page));
   const total = Number(database.query<{ count: number }, []>("SELECT COUNT(*) count FROM trash_items").get()?.count || 0);
   const rows = database.query<{ video_id: string; artifact_kind: TrashArtifactKind; deleted_at: string; title: string; metadata: string | null }, [number, number]>("SELECT t.video_id,t.artifact_kind,t.deleted_at,v.title,v.metadata FROM trash_items t JOIN videos v ON v.id=t.video_id ORDER BY t.deleted_at DESC LIMIT ? OFFSET ?").all(safeLimit, (safePage - 1) * safeLimit);
-  return { items: rows.map((row) => ({ videoId: row.video_id, artifactKind: row.artifact_kind, deletedAt: new Date(row.deleted_at), filename: filename(decodeJson(row.metadata), row.video_id), title: row.title, missing: false })), page: safePage, limit: safeLimit, total, totalPages: Math.max(1, Math.ceil(total / safeLimit)) };
+  return { items: rows.map((row) => ({ videoId: row.video_id, artifactKind: row.artifact_kind, deletedAt: new Date(row.deleted_at), filename: filename(decodeJson(row.metadata), row.video_id), title: row.title, size: Number(decodeJson(row.metadata)?.size || 0), missing: false })), page: safePage, limit: safeLimit, total, totalPages: Math.max(1, Math.ceil(total / safeLimit)) };
 }
 export function countTrashArtifacts(videoId: string) { return Number(database.query<{ count: number }, [string]>("SELECT COUNT(*) count FROM trash_items WHERE video_id=?").get(videoId)?.count || 0); }
 export function deleteVideo(id: string) { database.query("DELETE FROM videos WHERE id=?").run(id); }

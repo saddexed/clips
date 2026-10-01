@@ -1,8 +1,8 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode, useMemo } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode, useMemo } from 'react';
 import type Resumable from 'resumablejs';
-import { UploadCloud, X, CheckCircle2, AlertCircle, Plus, Loader2 } from 'lucide-react';
+import { UploadCloud, X, CheckCircle2, AlertCircle, Plus, Loader2, Ban } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { btn } from '@/components/ui';
@@ -23,12 +23,28 @@ interface GlobalUploadContextType {
   uploads: UploadItem[];
   addFiles: (files: FileList | File[]) => void;
   removeUpload: (id: string) => void;
+  cancelUpload: (id: string) => void;
   clearCompleted: () => void;
   isOverlayOpen: boolean;
   setOverlayOpen: (open: boolean) => void;
 }
 
 const GlobalUploadContext = createContext<GlobalUploadContextType | undefined>(undefined);
+
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+  return `${(value / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+type Collision = {
+  videoId: string;
+  title: string;
+  filename: string;
+  size: number;
+  createdAt: string;
+  uploadedAt: string;
+};
 
 type ChunkHandler = {
   resolve: (videoId: string) => void;
@@ -75,7 +91,12 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
   const [isDragging, setIsDragging] = useState(false);
   const [isOverlayOpen, setOverlayOpen] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [collisionPrompt, setCollisionPrompt] = useState<{ upload: UploadItem; collision: Collision } | null>(null);
   const chunkHandlers = useRef(new Map<File, ChunkHandler>());
+  const activeControls = useRef(new Map<string, () => void>());
+  const canceledUploads = useRef(new Set<string>());
+  const collisionResolver = useRef<((proceed: boolean) => void) | null>(null);
+  const resumableFiles = useRef(new Map<File, Parameters<Resumable['removeFile']>[0]>());
   const uploadSessionKeys = useRef(new Map<File, string>());
   const resumableRef = useRef<Promise<Resumable> | null>(null);
   const router = useRouter();
@@ -83,6 +104,7 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
   const getResumable = useCallback(() => {
     if (!resumableRef.current) {
       resumableRef.current = import('resumablejs').then(({ default: ResumableClient }) => {
+        // SAFETY: ResumableJS's runtime constructor accepts this options object; the package's declaration is narrower than its API.
         const client = new ResumableClient({
           target: '/api/upload/chunk',
           method: 'octet',
@@ -107,9 +129,11 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
           chunkRetryInterval: 1500,
           xhrTimeout: UPLOAD_TIMEOUT_MS,
           permanentErrors: [400, 401, 403, 404, 409, 413, 415, 500, 501],
+        // SAFETY: ResumableJS accepts this options object at runtime; its bundled types omit the generic constructor shape.
         } as unknown as ConstructorParameters<typeof ResumableClient>[0]);
 
         client.on('fileAdded', (file) => {
+          resumableFiles.current.set(file.file, file);
           client.upload();
         });
         client.on('fileProgress', (file) => {
@@ -251,38 +275,54 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
     };
   }, [addFiles]);
 
+  const confirmCollision = useCallback(async (upload: UploadItem) => {
+    const response = await fetch(`/api/upload/check?filename=${encodeURIComponent(upload.file.name)}`, { cache: 'no-store' });
+    if (!response.ok) return true;
+    const payload = await response.json() as { collision?: Collision | null };
+    if (!payload.collision) return true;
+    return new Promise<boolean>(resolve => {
+      collisionResolver.current = resolve;
+      setCollisionPrompt({ upload, collision: payload.collision! });
+    });
+  }, []);
+
   const doUpload = useCallback(async (upload: UploadItem) => {
     const controller = new AbortController();
     let timeout: ReturnType<typeof setTimeout> | undefined;
+    let chunkClient: Resumable | null = null;
+    activeControls.current.set(upload.id, () => {
+      controller.abort();
+      if (chunkClient) {
+        chunkHandlers.current.get(upload.file)?.reject(Object.assign(new Error('Upload canceled'), { name: 'AbortError' }));
+        const resumableFile = resumableFiles.current.get(upload.file);
+        if (resumableFile) chunkClient.removeFile(resumableFile);
+      }
+    });
 
     try {
-      if (upload.file.size > MAX_UPLOAD_BYTES) {
-        throw new Error('Upload exceeds the 500 MB limit');
+      if (upload.file.size > MAX_UPLOAD_BYTES) throw new Error('Upload exceeds the 500 MB limit');
+      if (!(await confirmCollision(upload))) {
+        setUploads(prev => prev.filter(item => item.id !== upload.id));
+        return;
       }
       let videoId: string;
       if (upload.file.size > CHUNK_SIZE) {
-        if (!globalThis.crypto?.subtle) {
-          throw new Error('Chunked uploads require HTTPS or localhost (browser crypto is unavailable)');
-        }
-        const client = await getResumable();
-        if (!client.support) throw new Error('This browser does not support resumable uploads');
+        if (!globalThis.crypto?.subtle) throw new Error('Chunked uploads require HTTPS or localhost (browser crypto is unavailable)');
+        chunkClient = await getResumable();
+        if (!chunkClient.support) throw new Error('This browser does not support resumable uploads');
         videoId = await new Promise<string>((resolve, reject) => {
           chunkHandlers.current.set(upload.file, {
             resolve, reject,
-            onProgress: progress => setUploads(prev => prev.map(p =>
-              p.id === upload.id ? { ...p, progress } : p
-            )),
+            onProgress: progress => setUploads(prev => prev.map(p => p.id === upload.id ? { ...p, progress } : p)),
           });
-          client.addFile(upload.file);
+          chunkClient!.addFile(upload.file);
         });
       } else {
         timeout = setTimeout(() => controller.abort('Upload timeout'), UPLOAD_TIMEOUT_MS);
         const formData = new FormData();
         formData.append('file', upload.file);
         formData.append('lastModified', upload.file.lastModified.toString());
-        const res = await fetch('/api/upload', {
-          method: 'POST', body: formData, signal: controller.signal,
-        });
+        const res = await fetch('/api/upload', { method: 'POST', body: formData, signal: controller.signal });
         if (!res.ok) {
           let message = 'Upload failed';
           try { message = (await res.json())?.error || message; } catch { /* Keep fallback. */ }
@@ -290,22 +330,20 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
         }
         videoId = (await res.json()).videoId;
       }
-
-      setUploads(prev => prev.map(p =>
-        p.id === upload.id ? { ...p, status: 'success', progress: 100, videoId } : p
-      ));
+      setUploads(prev => prev.map(p => p.id === upload.id ? { ...p, status: 'success', progress: 100, videoId } : p));
     } catch (err: any) {
-      console.error('[upload:client] upload failed', { size: upload.file.size, error: err });
-      const isAbort = err?.name === 'AbortError' || err?.message === 'Upload timeout';
-      setUploads(prev => prev.map(p =>
-        p.id === upload.id
-          ? { ...p, status: 'error', progress: 0, error: isAbort ? 'Upload timed out. Please retry.' : (err?.message || 'Error occurred') }
-          : p
-      ));
+      const isCanceled = canceledUploads.current.has(upload.id) || err?.name === 'AbortError';
+      if (!isCanceled) {
+        console.error('[upload:client] upload failed', { size: upload.file.size, error: err });
+        const isTimeout = err?.message === 'Upload timeout';
+        setUploads(prev => prev.map(p => p.id === upload.id ? { ...p, status: 'error', progress: 0, error: isTimeout ? 'Upload timed out. Please retry.' : (err?.message || 'Error occurred') } : p));
+      }
     } finally {
       if (timeout) clearTimeout(timeout);
+      activeControls.current.delete(upload.id);
+      chunkHandlers.current.delete(upload.file);
     }
-  }, [getResumable]);
+  }, [confirmCollision, getResumable]);
 
   // 3. Controlled queue runner (prevents stalled pending files)
   useEffect(() => {
@@ -324,6 +362,14 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
   }, [uploads, doUpload]);
 
   const removeUpload = (id: string) => {
+    activeControls.current.get(id)?.();
+    if (!activeControls.current.has(id)) setUploads(prev => prev.filter(p => p.id !== id));
+  };
+
+  const cancelUpload = (id: string) => {
+    canceledUploads.current.add(id);
+    if (collisionPrompt?.upload.id === id) resolveCollision(false);
+    activeControls.current.get(id)?.();
     setUploads(prev => prev.filter(p => p.id !== id));
   };
 
@@ -351,8 +397,14 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
   const completedUploads = uploads.filter(u => u.status === 'success').length;
   const showMiniTracker = !isOverlayOpen && uploads.length > 0;
 
+  const resolveCollision = (proceed: boolean) => {
+    collisionResolver.current?.(proceed);
+    collisionResolver.current = null;
+    setCollisionPrompt(null);
+  };
+
   return (
-    <GlobalUploadContext.Provider value={{ uploads, addFiles, removeUpload, clearCompleted, isOverlayOpen, setOverlayOpen }}>
+    <GlobalUploadContext.Provider value={{ uploads, addFiles, removeUpload, cancelUpload, clearCompleted, isOverlayOpen, setOverlayOpen }}>
       {children}
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes shake {
@@ -475,7 +527,14 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
                 <ul className="flex flex-col gap-3">
                   {uploads.map(up => (
                     <li key={up.id} className="flex flex-col gap-2 rounded-xl bg-bg p-4 ring-1 ring-line-soft">
-                      <div className="break-all text-sm font-medium">{up.file.name}</div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="break-all text-sm font-medium">{up.file.name}</div>
+                        {(up.status === 'uploading' || up.status === 'pending') && (
+                          <button type="button" className={btn('ghost', 'icon-sm')} onClick={() => cancelUpload(up.id)} title="Cancel upload" aria-label={`Cancel upload ${up.file.name}`}>
+                            <Ban size={15} />
+                          </button>
+                        )}
+                      </div>
 
                       <div className="flex items-center gap-4">
                         {up.status === 'success' ? (
@@ -509,6 +568,27 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
                 </label>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {collisionPrompt && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[#0d1b2a]/60 p-4 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="upload-collision-title" className="w-full max-w-lg rounded-2xl bg-surface p-6 text-ink shadow-2xl ring-1 ring-line-soft">
+            <h3 id="upload-collision-title" className="font-display text-xl font-bold tracking-tight">A file with this name already exists</h3>
+            <p className="mt-2 text-sm text-muted">{collisionPrompt.upload.file.name} matches an existing clip name. Review the details before continuing.</p>
+            <div className="mt-5 grid gap-4 sm:grid-cols-[9rem_1fr]">
+              <img src={`/t/${collisionPrompt.collision.videoId}`} alt="Existing clip preview" className="aspect-video w-full rounded-lg bg-bg object-cover ring-1 ring-line-soft" />
+              <dl className="grid grid-cols-[auto_1fr] content-start gap-x-4 gap-y-2 text-sm">
+                <dt className="text-muted">Filename</dt><dd className="break-all font-medium">{collisionPrompt.collision.filename}</dd>
+                <dt className="text-muted">Size</dt><dd>{formatBytes(collisionPrompt.collision.size)}</dd>
+                <dt className="text-muted">Created</dt><dd>{new Date(collisionPrompt.collision.createdAt).toLocaleString()}</dd>
+                <dt className="text-muted">Uploaded</dt><dd>{new Date(collisionPrompt.collision.uploadedAt).toLocaleString()}</dd>
+              </dl>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" className={btn('ghost')} onClick={() => resolveCollision(false)}>Ignore upload</button>
+              <button type="button" className={btn('solid')} onClick={() => resolveCollision(true)}>Proceed</button>
+            </div>
           </div>
         </div>
       )}
