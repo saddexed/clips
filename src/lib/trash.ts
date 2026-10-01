@@ -99,11 +99,11 @@ async function syncTrashIndex() {
     let found = 0;
     for (const kind of ["original", "converted"] as const) {
       if (await findArtifact(video.id, video.filename, kind)) {
-        recordTrashArtifact(video.id, kind);
+        recordTrashArtifact(video.id, kind, video.deletedAt || undefined);
         found += 1;
       }
     }
-    if (video.deletedAt && found === 0) recordTrashArtifact(video.id, "original");
+    if (video.deletedAt && found === 0) recordTrashArtifact(video.id, "original", video.deletedAt);
   }
 }
 
@@ -156,6 +156,7 @@ function resolvedPath(value: string | null | undefined) {
 
 export async function softDeleteVideo(video: Video, jobType: "DELETE" | "CANCELLED" = "DELETE", details: Record<string, unknown> = {}) {
   const kind: TrashArtifactKind = video.processedPath && video.activePath === video.processedPath ? "converted" : "original";
+  const deletedAt = new Date();
   const active = resolvedPath(video.activePath);
   let trashPath: string | null = null;
   if (active) {
@@ -168,8 +169,8 @@ export async function softDeleteVideo(video: Video, jobType: "DELETE" | "CANCELL
     recordTrashArtifact(video.id, kind);
   }
   removePendingJobsForVideo(video.id);
-  const deletedAt = new Date();
   updateVideo(video.id, { deletedAt });
+  recordTrashArtifact(video.id, kind, deletedAt);
   createJobHistory({
     videoId: video.id,
     jobType,

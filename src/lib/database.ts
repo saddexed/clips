@@ -388,8 +388,12 @@ export function findVideoByFilename(name: string): FilenameCollision | null {
   const video = mapVideo(row, []);
   return { videoId: video.id, title: video.title, filename: video.filename, size: video.originalSize, createdAt: video.createdAt, uploadedAt: video.uploadedAt };
 }
-export function recordTrashArtifact(videoId: string, artifactKind: TrashArtifactKind, deletedAt = new Date()) {
-  database.query("INSERT INTO trash_items(video_id,artifact_kind,deleted_at) VALUES(?,?,?) ON CONFLICT(video_id,artifact_kind) DO UPDATE SET deleted_at=excluded.deleted_at").run(videoId, artifactKind, deletedAt.toISOString());
+export function recordTrashArtifact(videoId: string, artifactKind: TrashArtifactKind, deletedAt?: Date) {
+  database.query(`
+    INSERT INTO trash_items(video_id,artifact_kind,deleted_at) VALUES(?,?,?)
+    ON CONFLICT(video_id,artifact_kind) DO UPDATE SET deleted_at=excluded.deleted_at
+    WHERE ? IS NOT NULL
+  `).run(videoId, artifactKind, (deletedAt || new Date()).toISOString(), deletedAt ? deletedAt.toISOString() : null);
 }
 export function removeTrashArtifact(videoId: string, artifactKind: TrashArtifactKind) { database.query("DELETE FROM trash_items WHERE video_id=? AND artifact_kind=?").run(videoId, artifactKind); }
 export function trashArtifactsForVideo(videoId: string) { return database.query<{ artifact_kind: TrashArtifactKind; deleted_at: string }, [string]>("SELECT artifact_kind,deleted_at FROM trash_items WHERE video_id=? ORDER BY deleted_at DESC").all(videoId); }

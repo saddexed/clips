@@ -11,6 +11,8 @@ import {
   listVideosPage,
   listVideos,
   updateVideo,
+  recordTrashArtifact,
+  trashArtifactsForVideo,
 } from "./database";
 import { hashBytes } from "./hash";
 import { toStoredPath, vaultArtifactPath } from "./paths";
@@ -184,6 +186,33 @@ test("library totals use current video sizes across pages and exclude trash and 
     expect(getVideoLibraryStats()).toEqual(expected);
   } finally {
     ids.forEach(deleteVideo);
+  }
+});
+
+test("trash artifact indexing preserves deletion timestamps unless explicitly repaired", () => {
+  const id = crypto.randomUUID();
+  const original = new Date("2025-01-02T03:04:05.000Z");
+  const later = new Date("2026-01-02T03:04:05.000Z");
+
+  try {
+    createVideo({
+      id,
+      title: "trash timestamp test",
+      filename: `${id}.mp4`,
+      status: "QUEUED",
+      originalSize: 1,
+      createdAt: original,
+      uploadedAt: original,
+      isHidden: false,
+    });
+    recordTrashArtifact(id, "original", original);
+    recordTrashArtifact(id, "original");
+    expect(trashArtifactsForVideo(id)[0]?.deleted_at).toBe(original.toISOString());
+
+    recordTrashArtifact(id, "original", later);
+    expect(trashArtifactsForVideo(id)[0]?.deleted_at).toBe(later.toISOString());
+  } finally {
+    deleteVideo(id);
   }
 });
 
