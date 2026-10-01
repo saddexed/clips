@@ -42,8 +42,8 @@ export async function finalizeUploadedFile(input: {
   if (!isImage) {
     try {
       probeMetadata = await extractMetadata(filePath);
-    } catch (error) {
-      console.warn("Unable to inspect uploaded media before queueing", error);
+    } catch {
+      // Media inspection is optional; processing will retry it later.
     }
   }
 

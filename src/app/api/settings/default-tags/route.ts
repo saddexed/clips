@@ -45,11 +45,6 @@ export async function PUT(request: NextRequest) {
     }
 
     const saved = await saveUploadDefaults({ tags, visibilityEnabled, ffmpegParameters });
-    console.info("[settings] upload defaults saved", {
-      tagCount: saved.tags.length,
-      visibilityEnabled: saved.visibilityEnabled,
-      ffmpegParametersLength: saved.ffmpegParameters.length,
-    });
 
     return NextResponse.json({
       ...saved,
@@ -71,7 +66,6 @@ export async function POST(request: NextRequest) {
     }
 
     const reset = await resetUploadDefaults();
-    console.info("[settings] upload defaults reset");
     return NextResponse.json(reset);
   } catch (error) {
     console.error("Default settings reset Error:", error);

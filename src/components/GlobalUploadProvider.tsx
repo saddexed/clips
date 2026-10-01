@@ -97,7 +97,6 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
               return identifier;
             } catch (error) {
               // ResumableJS silently skips files whose identifier promise rejects.
-              console.error('[upload:client] identifier failed', { size: file.size, error });
               chunkHandlers.current.get(file)?.reject(error instanceof Error ? error : new Error('Cannot identify upload'));
               chunkHandlers.current.delete(file);
               throw error;
@@ -111,29 +110,19 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
         } as unknown as ConstructorParameters<typeof ResumableClient>[0]);
 
         client.on('fileAdded', (file) => {
-          console.info('[upload:client] chunks started', { uploadId: file.uniqueIdentifier.slice(0, 12), size: file.size, chunks: file.chunks.length, chunkSize: CHUNK_SIZE });
           client.upload();
-        });
-        client.on('fileRetry', (file) => {
-          const attempts = file.chunks.flatMap((chunk, index) => {
-            const state = chunk as { xhr?: XMLHttpRequest; retries?: number };
-            return state.xhr?.readyState === 4 && state.xhr.status !== 200
-              ? [{ chunk: index + 1, status: state.xhr.status, retries: state.retries }] : [];
-          });
-          console.warn('[upload:client] chunk retry', { uploadId: file.uniqueIdentifier.slice(0, 12), attempts });
         });
         client.on('fileProgress', (file) => {
           chunkHandlers.current.get(file.file)?.onProgress(Math.min(99, Math.floor(file.progress(false) * 99)));
         });
         client.on('fileError', (file, message) => {
-          console.error('[upload:client] chunk failed', { uploadId: file.uniqueIdentifier.slice(0, 12), response: message?.slice(0, 240) });
           const handler = chunkHandlers.current.get(file.file);
           let reason = 'Chunk upload failed';
           try {
             reason = JSON.parse(message)?.error || reason;
           } catch {
             reason = message?.trimStart().startsWith('<')
-              ? 'Upload returned an HTML error page. Check the browser Network tab and proxy/server logs.'
+              ? 'Upload failed. Please try again.'
               : message?.slice(0, 240) || reason;
           }
           handler?.reject(new Error(reason));
@@ -151,26 +140,21 @@ export function GlobalUploadProvider({ children }: { children: ReactNode }) {
         client.on('fileSuccess', async (file) => {
           const handler = chunkHandlers.current.get(file.file);
           handler?.onProgress(99);
-          let completionStatus: number | undefined;
           try {
-            console.info('[upload:client] finalizing', { uploadId: file.uniqueIdentifier.slice(0, 12) });
             const response = await fetch('/api/upload/chunk/complete', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ identifier: file.uniqueIdentifier }),
             });
-            completionStatus = response.status;
             const data = await response.json().catch(() => null);
             if (!response.ok) throw new Error(data?.error || `Failed to finalize upload (HTTP ${response.status})`);
             if (!data?.videoId) throw new Error('Finalization response is missing a video ID');
-            console.info('[upload:client] completed', { uploadId: file.uniqueIdentifier.slice(0, 12), videoId: data.videoId });
             const storageKey = uploadSessionKeys.current.get(file.file);
             if (storageKey) {
               try { localStorage.removeItem(storageKey); } catch { /* Storage may be unavailable. */ }
             }
             handler?.resolve(data.videoId);
           } catch (error) {
-            console.error('[upload:client] finalization failed', { uploadId: file.uniqueIdentifier.slice(0, 12), status: completionStatus, error });
             handler?.reject(error instanceof Error ? error : new Error('Failed to finalize upload'));
           } finally {
             chunkHandlers.current.delete(file.file);

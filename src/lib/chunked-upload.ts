@@ -138,8 +138,8 @@ async function cleanupStaleSessions() {
       if (Date.now() - (await stat(dir)).mtimeMs > SESSION_TTL_MS) {
         await rm(dir, { recursive: true, force: true });
       }
-    } catch (error) {
-      console.warn("Unable to clean up expired upload", error);
+    } catch {
+      // A failed cleanup can be retried on a later upload.
     }
   }
 }

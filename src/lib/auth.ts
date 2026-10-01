@@ -94,13 +94,6 @@ export async function requireAdmin(request?: Request) {
   }
 
   if (request && !hasValidRequestOrigin(request)) {
-    console.warn("[auth] request origin mismatch", {
-      origin: request.headers.get("origin"),
-      requestOrigin: new URL(request.url).origin,
-      host: request.headers.get("host"),
-      forwardedHost: request.headers.get("x-forwarded-host"),
-      forwardedProto: request.headers.get("x-forwarded-proto"),
-    });
     return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
   }
 
